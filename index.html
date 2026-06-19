@@ -766,7 +766,7 @@ function renderManagerDetail(){
         <div class="card" style="margin-top:16px"><div class="card-head"><h3>Application</h3></div><div class="card-pad">${renderAppSummary(r.application)}</div></div>
         <div class="card" style="margin-top:16px"><div class="card-head"><h3>Documents</h3></div><div class="card-pad">${renderDocsRO(r.documents)}</div></div>
       </div>
-      <div><div class="card card-pad"><h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>${renderNotifs(r.id)}</div></div>
+      <div><div class="card card-pad"><h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>${renderNotifs(DB.email_logs.filter(l=>l.candidate_id===r.id).map(l=>({to:l.recipient, subject:l.subject, ts:new Date(l.sent_at||Date.now()).getTime(), status:l.status})))}</div></div>
     </div>
     <div id="modalRoot"></div>`;
 }
@@ -1098,7 +1098,7 @@ function renderHRDetail(){
         <div class="card" style="margin-top:16px"><div class="card-head"><h3>Application</h3></div><div class="card-pad">${renderAppSummary(r.application)}</div></div>
         <div class="card" style="margin-top:16px"><div class="card-head"><h3>Documents</h3></div><div class="card-pad">${renderDocsRO(r.documents)}</div></div>
       </div>
-      <div><div class="card card-pad"><h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>${renderNotifs(r.id)}</div></div>
+      <div><div class="card card-pad"><h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>${renderNotifs(DB.email_logs.filter(l=>l.candidate_id===r.id).map(l=>({to:l.recipient, subject:l.subject, ts:new Date(l.sent_at||Date.now()).getTime(), status:l.status})))}</div></div>
     </div>
     <div id="modalRoot"></div>`;
 }
@@ -1551,8 +1551,8 @@ function renderDocsRO(docs){
 }
 function renderNotifs(list){
   if(!list||!list.length) return '<p class="micro">No notifications yet.</p>';
-  return `<div class="notif-list">${list.map(n=>`<div class="notif-item"><div class="notif-icon">📧</div>
-    <div class="notif-body"><div class="to">To: ${esc(n.to)}</div><div class="subj">${esc(n.subject)}</div><div class="ts">${fmtDT(n.ts)}</div></div>
+  return `<div class="notif-list">${list.map(n=>`<div class="notif-item"><div class="notif-icon">${n.status==='failed'?'❌':(n.status==='pending'?'⏳':'📧')}</div>
+    <div class="notif-body"><div class="to">To: ${esc(n.to)}</div><div class="subj">${esc(n.subject)}</div><div class="ts">${fmtDT(n.ts)} ${n.status==='failed'?'(Failed)':''}</div></div>
   </div>`).join('')}</div>`;
 }
 function renderRatingSummary(rs){
