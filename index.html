@@ -741,7 +741,8 @@ function showEmailBody(escapedBody){
 
 
 
-function copyLink(url){
+function copyLink(code){
+  const url = code.includes('http') ? code : window.location.origin + window.location.pathname + '#candidate/' + code;
   navigator.clipboard.writeText(url).then(()=>toast('Link copied to clipboard','📋')).catch(()=>{ toast('Could not copy — please select and copy the link manually','⚠️'); });
 }
 
