@@ -1694,8 +1694,10 @@ async function downloadCandidatePDF(id) {
   el.className = 'card card-pad';
   el.style.width = '800px';
   el.style.position = 'absolute';
-  el.style.left = '-9999px';
+  el.style.left = '0';
   el.style.top = '0';
+  el.style.zIndex = '-1';
+  el.style.background = 'white';
   el.style.fontFamily = 'sans-serif';
   el.style.color = '#333';
   
