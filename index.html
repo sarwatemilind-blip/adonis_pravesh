@@ -1690,16 +1690,10 @@ async function downloadCandidatePDF(id) {
   toast('Generating PDF...','⏳');
   
   const el = document.createElement('div');
-  // Use card styling and a fixed width to ensure grid columns render nicely
-  el.className = 'card card-pad';
-  el.style.width = '800px';
-  el.style.position = 'absolute';
-  el.style.left = '0';
-  el.style.top = '0';
-  el.style.zIndex = '-1';
-  el.style.background = 'white';
+  el.style.padding = '30px';
   el.style.fontFamily = 'sans-serif';
   el.style.color = '#333';
+  el.className = 'app-grid'; // To pick up any grid styles if needed
   
   el.innerHTML = `
     <h1 style="margin-bottom: 5px; font-size: 24px;">Candidate Application: ${esc(r.name)}</h1>
@@ -1712,8 +1706,6 @@ async function downloadCandidatePDF(id) {
   const details = el.querySelectorAll('details');
   details.forEach(d => d.setAttribute('open', 'open'));
   
-  document.body.appendChild(el);
-  
   const opt = {
     margin:       10,
     filename:     `Candidate_${r.name.replace(/\s+/g,'_')}_${r.id}.pdf`,
@@ -1723,10 +1715,8 @@ async function downloadCandidatePDF(id) {
   };
   
   html2pdf().set(opt).from(el).save().then(() => {
-    document.body.removeChild(el);
     toast('PDF downloaded','✅');
   }).catch(err => {
-    document.body.removeChild(el);
     console.error('PDF generation error:', err);
     toast('Failed to generate PDF', '❌');
   });
