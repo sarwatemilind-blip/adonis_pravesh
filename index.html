@@ -1220,24 +1220,42 @@ function wizPrev(){ if(VIEW.step>0){ VIEW.step--; render(); } }
 function addRow(path,tpl){ const a=getDeep(REC.application,path)||[]; a.push(JSON.parse(JSON.stringify(tpl))); setDeep(REC.application,path,a); saveRec(); render(); }
 function removeRow(path,i){ const a=getDeep(REC.application,path)||[]; a.splice(i,1); setDeep(REC.application,path,a); saveRec(); render(); }
 async function attachDoc(e,key){ 
-  const f=e.target.files[0]; 
-  if(!f) return; 
-  if(f.size > 5 * 1024 * 1024){ toast('File is too large (max 5MB)','⚠️'); return; }
+  const files = Array.from(e.target.files);
+  if(!files.length) return;
   
-  toast('Uploading document...','⏳');
+  // Ensure the document category is an array (backward compatibility)
+  if(!REC.documents[key]) REC.documents[key] = [];
+  else if(!Array.isArray(REC.documents[key])) REC.documents[key] = [REC.documents[key]];
   
-  const path = `${REC.id}/${key}-${Date.now()}-${f.name}`;
-  const { data, error } = await supa.storage.from('candidate-documents').upload(path, f);
+  toast(`Uploading ${files.length} document(s)...`,'⏳');
   
-  if(error) {
-    console.error('Upload failed', error);
-    toast('Upload failed. Try again.','❌');
-    return;
+  let successCount = 0;
+  for(const f of files) {
+    if(f.size > 5 * 1024 * 1024){ 
+      toast(`Skipped ${f.name} (too large, max 5MB)`,'⚠️'); 
+      continue; 
+    }
+    const path = `${REC.id}/${key}-${Date.now()}-${f.name}`;
+    const { data, error } = await supa.storage.from('candidate-documents').upload(path, f);
+    if(error) {
+      console.error('Upload failed', error);
+      toast(`Failed to upload ${f.name}`,'❌');
+    } else {
+      REC.documents[key].push({fileName:f.name, size:f.size, path:data.path, uploadedAt:Date.now()});
+      successCount++;
+    }
   }
   
-  REC.documents[key]={fileName:f.name,size:f.size,path:data.path,uploadedAt:Date.now()}; 
   saveRec(); render(); 
-  toast('Document uploaded!','✅');
+  if(successCount > 0) toast(`Successfully uploaded ${successCount} document(s)!`,'✅');
+}
+
+function removeDoc(key, index) {
+  if(!REC.documents[key] || !Array.isArray(REC.documents[key])) return;
+  if(confirm('Are you sure you want to remove this document?')) {
+    REC.documents[key].splice(index, 1);
+    saveRec(); render();
+  }
 }
 
 function submitApp(){
@@ -1520,13 +1538,26 @@ function sDocuments(){
   DOCUMENT_GROUPS.forEach(g=>{
     html+=`<div class="doc-group"><h4>${g.title}</h4>`;
     g.items.forEach(it=>{
-      const key=g.key+'.'+it.key, d=docs[key];
-      html+=`<div class="doc-item ${d?'attached':''}">
+      const key=g.key+'.'+it.key;
+      let d = docs[key];
+      if(d && !Array.isArray(d)) d = [d]; // Backward compat
+      
+      let filesHtml = '';
+      if(d && d.length > 0) {
+        filesHtml = d.map((file, idx) => `
+          <div class="file-info" style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            &#10003; ${esc(file.fileName)}
+            <button type="button" class="btn btn-sm" style="padding:1px 4px;font-size:10px;line-height:1" onclick="App.removeDoc('${key}', ${idx})" title="Remove file">❌</button>
+          </div>
+        `).join('');
+      }
+      
+      html+=`<div class="doc-item ${(d && d.length)?'attached':''}">
         <div><span class="name">${it.label}</span>${it.optional?' <span class="opt">(if applicable)</span>':''}
-          ${d?`<div class="file-info">&#10003; ${esc(d.fileName)}</div>`:''}
+          ${filesHtml}
         </div>
-        <div class="file-btn btn btn-sm">${d?'Replace':'Attach'}
-          <input type="file" onchange="App.attachDoc(event,'${key}')">
+        <div class="file-btn btn btn-sm">Attach
+          <input type="file" multiple onchange="App.attachDoc(event,'${key}')">
         </div>
       </div>`;
     });
@@ -1566,11 +1597,23 @@ function renderDocsRO(docs){
   DOCUMENT_GROUPS.forEach(g=>{
     html+=`<div class="doc-group"><h4>${g.title}</h4>`;
     g.items.forEach(it=>{
-      const key=g.key+'.'+it.key, d=docs[key];
-      const btn = (d && d.path) ? `<button class="btn btn-sm" style="margin-left:8px;padding:2px 6px" onclick="App.downloadDoc('${d.path}')" title="Download Document">⬇️</button>` : '';
-      html+=`<div class="doc-item ${d?'attached':''}">
+      const key=g.key+'.'+it.key;
+      let d = docs[key];
+      if(d && !Array.isArray(d)) d = [d]; // Backward compat
+      
+      let filesHtml = '';
+      if(d && d.length > 0) {
+        filesHtml = d.map(file => {
+          const btn = file.path ? `<button class="btn btn-sm" style="margin-left:8px;padding:2px 6px" onclick="App.downloadDoc('${file.path}')" title="Download Document">⬇️</button>` : '';
+          return `<div class="file-info" style="margin-top:4px">&#10003; ${esc(file.fileName)}${btn}</div>`;
+        }).join('');
+      } else {
+        filesHtml = `<div class="micro">Not attached</div>`;
+      }
+      
+      html+=`<div class="doc-item ${(d && d.length)?'attached':''}">
         <div><span class="name">${it.label}</span>${it.optional?' <span class="opt">(if applicable)</span>':''}</div>
-        <div class="${d?'file-info':'micro'}">${d?'&#10003; '+esc(d.fileName):'Not attached'}${btn}</div>
+        <div>${filesHtml}</div>
       </div>`;
     });
     html+=`</div>`;
@@ -2011,7 +2054,7 @@ window.App={
   
   showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
-  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, submitApp, downloadDoc,
+  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc,
 };
 
 document.getElementById('brandLogo').src = LOGO_URI;
