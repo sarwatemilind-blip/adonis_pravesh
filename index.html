@@ -1714,7 +1714,7 @@ async function downloadCandidatePDF(id) {
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   
-  html2pdf().set(opt).from(el).save().then(() => {
+  html2pdf().set(opt).from(el.outerHTML).save().then(() => {
     toast('PDF downloaded','✅');
   }).catch(err => {
     console.error('PDF generation error:', err);
