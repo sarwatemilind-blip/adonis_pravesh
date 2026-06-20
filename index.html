@@ -673,6 +673,21 @@ function renderManagerDashboard(){
     <div id="modalRoot"></div>`;
 }
 
+async function deleteCandidate(id) {
+  if(!confirm('Are you sure you want to permanently delete this candidate? This action cannot be undone.')) return;
+  toast('Deleting candidate...', '⏳');
+  const { error } = await supa.from('candidates').delete().eq('id', id);
+  if (error) {
+    console.error('Delete failed', error);
+    toast('Failed to delete candidate.', '❌');
+    return;
+  }
+  toast('Candidate deleted.', '✅');
+  // Refresh data
+  await fetchAdminData();
+  render();
+}
+
 function candTable(list,role){
   const sorted=list.slice().sort((a,b)=>b.updatedAt-a.updatedAt);
   return `<table class="tbl"><thead><tr><th>Candidate</th><th>Position</th><th>Code</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
@@ -684,7 +699,10 @@ function candTable(list,role){
       </td>
       <td>${statusBadge(c.status)}</td>
       <td class="micro">${fmtDate(c.updatedAt)}</td>
-      <td><button class="btn btn-sm" onclick="App.${role==='hr'?'openHR':'openManager'}('${c.id}')">Open →</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick="App.${role==='hr'?'openHR':'openManager'}('${c.id}')">Open →</button>
+        <button class="btn btn-sm btn-red" style="padding:4px 8px;margin-left:4px" onclick="App.deleteCandidate('${c.id}')" title="Delete Candidate">🗑️</button>
+      </td>
     </tr>`).join('')}
   </tbody></table>`;
 }
@@ -2054,7 +2072,7 @@ window.App={
   
   showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
-  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc,
+  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc, deleteCandidate,
 };
 
 document.getElementById('brandLogo').src = LOGO_URI;
