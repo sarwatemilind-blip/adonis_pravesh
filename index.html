@@ -479,8 +479,11 @@ async function loadFromStorage() {
     
     DB.email_logs = elogs || [];
     
-    const ap = await window.storage?.get('prv_adminPass', true).catch(()=>null);
-    if(ap && ap.status==='fulfilled' && ap.value) DB.adminPass = ap.value.value;
+    // Load admin password from settings row
+    if (DB.managers['ADMIN_SETTINGS']) {
+      DB.adminPass = DB.managers['ADMIN_SETTINGS'].password;
+      delete DB.managers['ADMIN_SETTINGS']; // Don't show in UI
+    }
   } catch(e) {
     console.error('Failed to load from Supabase', e);
   }
@@ -1101,13 +1104,29 @@ function showChangePwModal(){
     </div>
   </div>`;
 }
-function changePw(){
+async function changePw(){
   const cur=document.getElementById('cpCurrent').value;
   const nw =document.getElementById('cpNew').value;
   const cnf=document.getElementById('cpConfirm').value;
   if(cur!==DB.adminPass){ toast('Current password is incorrect','❌'); return; }
   if(!nw||nw!==cnf){ toast('New passwords do not match','⚠️'); return; }
-  DB.adminPass=nw; persist();
+  
+  toast('Updating password...', '⏳');
+  const { error } = await supa.from('managers').upsert({
+    id: 'ADMIN_SETTINGS',
+    username: 'admin_settings',
+    name: 'Admin Settings',
+    password: nw,
+    email: 'admin@pravesh.test'
+  });
+  
+  if (error) {
+    console.error('Failed to update password', error);
+    toast('Failed to save new password', '❌');
+    return;
+  }
+  
+  DB.adminPass=nw;
   toast('Admin password updated successfully','✅'); closeModal();
 }
 
