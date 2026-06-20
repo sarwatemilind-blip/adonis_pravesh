@@ -774,7 +774,7 @@ function copyLink(code){
   navigator.clipboard.writeText(url).then(()=>toast('Link copied to clipboard','📋')).catch(()=>{ toast('Could not copy — please select and copy the link manually','⚠️'); });
 }
 
-function openManager(id){ REC=DB.candidates[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); }
+function openManager(id){ REC=DB.candidates[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
 function backToMgrDash(){ VIEW.screen='dashboard'; REC=null; render(); }
 
 function renderManagerDetail(){
@@ -1133,7 +1133,7 @@ async function changePw(){
   toast('Admin password updated successfully','✅'); closeModal();
 }
 
-function openHR(id){ REC=DB.candidates[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); }
+function openHR(id){ REC=DB.candidates[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
 function backToHRDash(){ VIEW.screen='dashboard'; REC=null; render(); }
 
 function renderHRDetail(){
