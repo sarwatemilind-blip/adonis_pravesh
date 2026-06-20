@@ -970,7 +970,6 @@ function renderHRLogin(){
       <p class="login-sub">Head Office access — recruitment tracking &amp; approvals</p>
       <div class="field"><label>Password</label><input type="password" id="hrPass" placeholder="Admin password" autocomplete="current-password"></div>
       <button class="btn btn-primary btn-block" onclick="App.hrLogin()" style="margin-top:8px">Sign in →</button>
-      <p class="micro" style="margin-top:12px;text-align:center">Default password: <strong>Adonis@2024</strong></p>
     </div></div>`;
   document.getElementById('hrPass').addEventListener('keydown',e=>{if(e.key==='Enter') App.hrLogin();});
 }
