@@ -684,7 +684,7 @@ async function deleteCandidate(id) {
   }
   toast('Candidate deleted.', '✅');
   // Refresh data
-  await fetchAdminData();
+  await loadFromStorage();
   render();
 }
 
@@ -1071,12 +1071,20 @@ function createMgr(){
   closeModal(); render();
 }
 
-function deleteMgr(id){
+async function deleteMgr(id){
   const mgr=DB.managers[id];
   if(!mgr) return;
   if(!confirm(`Remove manager account for "${mgr.name}"? Their candidates will remain in the system.`)) return;
+  toast('Removing manager...','⏳');
+  const { error } = await supa.from('managers').delete().eq('id', id);
+  if (error) {
+    console.error('Failed to delete manager', error);
+    toast('Failed to delete manager','❌');
+    return;
+  }
   delete DB.managers[id];
-  persist(); render();
+  render();
+  toast('Manager removed','✅');
 }
 
 function showChangePwModal(){
@@ -2106,11 +2114,9 @@ document.getElementById('brandLogo').src = LOGO_URI;
     if (SESSION.isAdmin) {
       VIEW.role = 'hr';
       VIEW.screen = 'dashboard';
-      fetchAdminData().then(render);
     } else if (SESSION.managerId) {
       VIEW.role = 'manager';
       VIEW.screen = 'dashboard';
-      fetchAdminData().then(render);
     }
   }
   render();
