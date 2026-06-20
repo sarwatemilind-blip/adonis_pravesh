@@ -1690,10 +1690,9 @@ async function downloadCandidatePDF(id) {
   toast('Generating PDF...','⏳');
   
   const el = document.createElement('div');
-  el.style.padding = '30px';
+  el.style.padding = '20px';
   el.style.fontFamily = 'sans-serif';
   el.style.color = '#333';
-  el.className = 'app-grid'; // To pick up any grid styles if needed
   
   el.innerHTML = `
     <h1 style="margin-bottom: 5px; font-size: 24px;">Candidate Application: ${esc(r.name)}</h1>
@@ -1702,19 +1701,33 @@ async function downloadCandidatePDF(id) {
   `;
   el.innerHTML += renderAppSummary(r.application);
   
-  // Expand all details blocks so html2pdf can capture the content
+  // Expand all details blocks
   const details = el.querySelectorAll('details');
   details.forEach(d => d.setAttribute('open', 'open'));
+  
+  // To avoid grid overlap issues on pure unattached DOM elements, we override grid-template-columns inline
+  const grid2 = el.querySelectorAll('.grid-2');
+  grid2.forEach(g => {
+    g.style.display = 'grid';
+    g.style.gridTemplateColumns = '1fr 1fr';
+    g.style.gap = '14px';
+  });
+  const grid3 = el.querySelectorAll('.grid-3');
+  grid3.forEach(g => {
+    g.style.display = 'grid';
+    g.style.gridTemplateColumns = '1fr 1fr 1fr';
+    g.style.gap = '14px';
+  });
   
   const opt = {
     margin:       10,
     filename:     `Candidate_${r.name.replace(/\s+/g,'_')}_${r.id}.pdf`,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, windowWidth: 820 },
+    html2canvas:  { scale: 2 },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   
-  html2pdf().set(opt).from(el.outerHTML).save().then(() => {
+  html2pdf().set(opt).from(el).save().then(() => {
     toast('PDF downloaded','✅');
   }).catch(err => {
     console.error('PDF generation error:', err);
