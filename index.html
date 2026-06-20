@@ -274,6 +274,7 @@
   </footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 
 /* ═══════════════════════════════════════════════════════
@@ -784,7 +785,10 @@ function renderManagerDetail(){
         <h1>${esc(r.name)}</h1>
         <div class="sub">${esc(r.position)} · Code <span class="codepill" style="font-size:11px;padding:3px 8px">${r.id}</span></div>
       </div>
-      <button class="btn btn-ghost" onclick="App.backToMgrDash()">← All candidates</button>
+      <div>
+        <button class="btn btn-primary" style="margin-right:8px" onclick="App.downloadCandidatePDF('${r.id}')">⬇️ Download PDF</button>
+        <button class="btn btn-ghost" onclick="App.backToMgrDash()">← All candidates</button>
+      </div>
     </div>
     ${stepperHTML(r.status)}
     <div class="two-col">
@@ -1140,7 +1144,10 @@ function renderHRDetail(){
       <div><span class="eyebrow">HR / Admin</span><h1>${esc(r.name)}</h1>
         <div class="sub">${esc(r.position)} · Code <span class="codepill" style="font-size:11px;padding:3px 8px">${r.id}</span> · Manager: ${esc(mgrName)}</div>
       </div>
-      <button class="btn btn-ghost" onclick="App.backToHRDash()">← All candidates</button>
+      <div>
+        <button class="btn btn-primary" style="margin-right:8px" onclick="App.downloadCandidatePDF('${r.id}')">⬇️ Download PDF</button>
+        <button class="btn btn-ghost" onclick="App.backToHRDash()">← All candidates</button>
+      </div>
     </div>
     ${stepperHTML(r.status)}
     <div class="two-col">
@@ -1676,6 +1683,39 @@ async function downloadDoc(path) {
   }
   window.open(data.signedUrl, '_blank');
 }
+
+async function downloadCandidatePDF(id) {
+  const r = DB.candidates[id];
+  if(!r) return;
+  toast('Generating PDF...','⏳');
+  
+  const el = document.createElement('div');
+  el.style.padding = '20px';
+  el.style.fontFamily = 'sans-serif';
+  el.style.color = '#333';
+  
+  el.innerHTML = `
+    <h1 style="margin-bottom: 5px; font-size: 24px;">Candidate Application: ${esc(r.name)}</h1>
+    <p style="margin-top: 0; color: #666; margin-bottom: 20px;">Position: ${esc(r.position)} | Code: ${r.id}</p>
+    <div style="border-top: 1px solid #ccc; margin-bottom: 20px;"></div>
+  `;
+  el.innerHTML += renderAppSummary(r.application);
+  
+  const opt = {
+    margin:       10,
+    filename:     \`Candidate_\${r.name.replace(/\\s+/g,'_')}_\${r.id}.pdf\`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2 },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  
+  html2pdf().set(opt).from(el).save().then(() => {
+    toast('PDF downloaded','✅');
+  }).catch(err => {
+    console.error('PDF generation error:', err);
+    toast('Failed to generate PDF', '❌');
+  });
+}
 function renderNotifs(list){
   if(!list||!list.length) return '<p class="micro">No notifications yet.</p>';
   return `<div class="notif-list">${list.map(n=>`<div class="notif-item"><div class="notif-icon">${n.status==='failed'?'❌':(n.status==='pending'?'⏳':'📧')}</div>
@@ -2098,7 +2138,7 @@ window.App={
   
   showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
-  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc, deleteCandidate,
+  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc, deleteCandidate, downloadCandidatePDF,
 };
 
 document.getElementById('brandLogo').src = LOGO_URI;
