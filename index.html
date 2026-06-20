@@ -2106,6 +2106,7 @@ document.getElementById('brandLogo').src = LOGO_URI;
 
 (async function boot(){
   await loadFromStorage();
+  let m = null;
   // Prioritize active HR/Manager sessions over candidate hash links
   if (SESSION.isAdmin || SESSION.managerId) {
     if (SESSION.isAdmin) {
@@ -2122,7 +2123,7 @@ document.getElementById('brandLogo').src = LOGO_URI;
   } else {
     // Handle deep-link hash for candidates: #candidate/CODE
     const hash = window.location.hash;
-    const m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
+    m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
     if(m){
       const code = m[1].toUpperCase();
       const rec = DB.candidates[code];
