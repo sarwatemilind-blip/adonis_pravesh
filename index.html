@@ -480,9 +480,9 @@ async function loadFromStorage() {
     DB.email_logs = elogs || [];
     
     // Load admin password from settings row
-    if (DB.managers['ADMIN_SETTINGS']) {
-      DB.adminPass = DB.managers['ADMIN_SETTINGS'].password;
-      delete DB.managers['ADMIN_SETTINGS']; // Don't show in UI
+    if (DB.managers['00000000-0000-0000-0000-000000000000']) {
+      DB.adminPass = DB.managers['00000000-0000-0000-0000-000000000000'].password;
+      delete DB.managers['00000000-0000-0000-0000-000000000000']; // Don't show in UI
     }
   } catch(e) {
     console.error('Failed to load from Supabase', e);
@@ -1112,7 +1112,7 @@ async function changePw(){
   
   toast('Updating password...', '⏳');
   const { error } = await supa.from('managers').upsert({
-    id: 'ADMIN_SETTINGS',
+    id: '00000000-0000-0000-0000-000000000000',
     username: 'admin_settings',
     name: 'Admin Settings',
     password: nw,
