@@ -2087,36 +2087,42 @@ document.getElementById('brandLogo').src = LOGO_URI;
 
 (async function boot(){
   await loadFromStorage();
-  // Handle deep-link hash: #candidate/CODE
-  const hash = window.location.hash;
-  const m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
-  if(m){
-    const code = m[1].toUpperCase();
-    const rec = DB.candidates[code];
-    if(rec){
-      REC = rec;
-      if(!REC.application.position) REC.application.position = REC.position;
-      if(!REC.application.source)   REC.application.source   = REC.source;
-      VIEW.role   = 'candidate';
-      VIEW.screen = REC.status === 'invited' ? 'wizard' : 'status';
-      VIEW.step   = 0;
-    } else {
-      // code not yet in memory (cold load) — show entry with pre-filled code
-      VIEW.role   = 'candidate';
-      VIEW.screen = 'entry';
-      setTimeout(()=>{
-        const el = document.getElementById('accessInput');
-        if(el){ el.value = code; }
-      }, 100);
-    }
-  } else {
-    // Auto-login from session
+  // Prioritize active HR/Manager sessions over candidate hash links
+  if (SESSION.isAdmin || SESSION.managerId) {
     if (SESSION.isAdmin) {
       VIEW.role = 'hr';
       VIEW.screen = 'dashboard';
-    } else if (SESSION.managerId) {
+    } else {
       VIEW.role = 'manager';
       VIEW.screen = 'dashboard';
+    }
+    // Clear hash so it doesn't stay in the URL
+    if (window.location.hash.startsWith('#candidate')) {
+      history.replaceState(null, '', window.location.pathname);
+    }
+  } else {
+    // Handle deep-link hash for candidates: #candidate/CODE
+    const hash = window.location.hash;
+    const m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
+    if(m){
+      const code = m[1].toUpperCase();
+      const rec = DB.candidates[code];
+      if(rec){
+        REC = rec;
+        if(!REC.application.position) REC.application.position = REC.position;
+        if(!REC.application.source)   REC.application.source   = REC.source;
+        VIEW.role   = 'candidate';
+        VIEW.screen = REC.status === 'invited' ? 'wizard' : 'status';
+        VIEW.step   = 0;
+      } else {
+        // code not yet in memory (cold load) — show entry with pre-filled code
+        VIEW.role   = 'candidate';
+        VIEW.screen = 'entry';
+        setTimeout(()=>{
+          const el = document.getElementById('accessInput');
+          if(el){ el.value = code; }
+        }, 100);
+      }
     }
   }
   render();
