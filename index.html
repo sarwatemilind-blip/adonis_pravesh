@@ -1690,7 +1690,12 @@ async function downloadCandidatePDF(id) {
   toast('Generating PDF...','⏳');
   
   const el = document.createElement('div');
-  el.style.padding = '20px';
+  // Use card styling and a fixed width to ensure grid columns render nicely
+  el.className = 'card card-pad';
+  el.style.width = '800px';
+  el.style.position = 'absolute';
+  el.style.left = '-9999px';
+  el.style.top = '0';
   el.style.fontFamily = 'sans-serif';
   el.style.color = '#333';
   
@@ -1701,17 +1706,25 @@ async function downloadCandidatePDF(id) {
   `;
   el.innerHTML += renderAppSummary(r.application);
   
+  // Expand all details blocks so html2pdf can capture the content
+  const details = el.querySelectorAll('details');
+  details.forEach(d => d.setAttribute('open', 'open'));
+  
+  document.body.appendChild(el);
+  
   const opt = {
     margin:       10,
     filename:     `Candidate_${r.name.replace(/\s+/g,'_')}_${r.id}.pdf`,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2 },
+    html2canvas:  { scale: 2, windowWidth: 820 },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   
   html2pdf().set(opt).from(el).save().then(() => {
+    document.body.removeChild(el);
     toast('PDF downloaded','✅');
   }).catch(err => {
+    document.body.removeChild(el);
     console.error('PDF generation error:', err);
     toast('Failed to generate PDF', '❌');
   });
