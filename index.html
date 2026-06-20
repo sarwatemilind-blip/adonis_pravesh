@@ -656,7 +656,7 @@ function renderManagerDashboard(){
     </div>
     <div class="grid-3" style="margin-bottom:18px">
       ${statCard('Active',mine.filter(c=>c.status!=='approved'&&c.status!=='rejected').length)}
-      ${statCard('Awaiting review',mine.filter(c=>c.status==='submitted').length)}
+      ${statCard('Approval Pending',mine.filter(c=>c.status==='submitted').length)}
       ${statCard('With HR',mine.filter(c=>c.status==='interview_rated').length)}
     </div>
     <div class="card">
