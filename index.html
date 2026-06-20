@@ -2101,6 +2101,17 @@ document.getElementById('brandLogo').src = LOGO_URI;
         if(el){ el.value = code; }
       }, 100);
     }
+  } else {
+    // Auto-login from session
+    if (SESSION.isAdmin) {
+      VIEW.role = 'hr';
+      VIEW.screen = 'dashboard';
+      fetchAdminData().then(render);
+    } else if (SESSION.managerId) {
+      VIEW.role = 'manager';
+      VIEW.screen = 'dashboard';
+      fetchAdminData().then(render);
+    }
   }
   render();
   // after render, if we had a cold-load code, fill the input
