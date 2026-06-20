@@ -324,7 +324,7 @@ const HR_VERIFY = [
 ];
 
 const STAGE_ORDER  = ['invited','submitted','under_review','interview_rated','approved','offer_sent'];
-const STAGE_LABELS = {invited:'Invited',submitted:'Application Filled',under_review:'Manager Review',
+const STAGE_LABELS = {invited:'Invited',submitted:'Form Filled',under_review:'Manager Approval Pending',
   interview_rated:'Interview Rated',approved:'Approved',rejected:'Rejected',offer_sent:'Offer Sent'};
 
 /* ─── in-memory DB (source of truth within this session) ─ */
@@ -973,8 +973,9 @@ function renderHRDashboard(){
       </div>
     </div>
     <!-- stats -->
-    <div class="grid-3" style="margin-bottom:18px">
-      ${statCard('Pending approval',pending.length)}
+    <div class="grid-4" style="margin-bottom:18px">
+      ${statCard('HR Approval Pending',pending.length)}
+      ${statCard('Manager Approval Pending',DB.index.filter(c=>c.status==='submitted'||c.status==='under_review').length)}
       ${statCard('Approved',DB.index.filter(c=>c.status==='approved').length)}
       ${statCard('Total tracked',DB.index.length)}
     </div>
