@@ -520,6 +520,11 @@ function fillForm(el,obj){
   });
 }
 
+function addNotif(rec, to, subject, status) {
+  // Placeholder to prevent reference errors on submit
+  console.log(`Notification intended for ${to}: ${subject} [${status}]`);
+}
+
 function toast(msg,icon='📧'){
   const root=document.getElementById('toastRoot');
   if(!root) return;
