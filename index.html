@@ -1219,7 +1219,26 @@ function wizNext(){ if(VIEW.step<WIZ.length-1){ VIEW.step++; saveRec(); render()
 function wizPrev(){ if(VIEW.step>0){ VIEW.step--; render(); } }
 function addRow(path,tpl){ const a=getDeep(REC.application,path)||[]; a.push(JSON.parse(JSON.stringify(tpl))); setDeep(REC.application,path,a); saveRec(); render(); }
 function removeRow(path,i){ const a=getDeep(REC.application,path)||[]; a.splice(i,1); setDeep(REC.application,path,a); saveRec(); render(); }
-function attachDoc(e,key){ const f=e.target.files[0]; if(!f) return; REC.documents[key]={fileName:f.name,size:f.size,uploadedAt:Date.now()}; saveRec(); render(); }
+async function attachDoc(e,key){ 
+  const f=e.target.files[0]; 
+  if(!f) return; 
+  if(f.size > 5 * 1024 * 1024){ toast('File is too large (max 5MB)','⚠️'); return; }
+  
+  toast('Uploading document...','⏳');
+  
+  const path = `${REC.id}/${key}-${Date.now()}-${f.name}`;
+  const { data, error } = await supa.storage.from('candidate-documents').upload(path, f);
+  
+  if(error) {
+    console.error('Upload failed', error);
+    toast('Upload failed. Try again.','❌');
+    return;
+  }
+  
+  REC.documents[key]={fileName:f.name,size:f.size,path:data.path,uploadedAt:Date.now()}; 
+  saveRec(); render(); 
+  toast('Document uploaded!','✅');
+}
 
 function submitApp(){
   const a=REC.application, d=a.declarationChecks||{};
@@ -1548,14 +1567,27 @@ function renderDocsRO(docs){
     html+=`<div class="doc-group"><h4>${g.title}</h4>`;
     g.items.forEach(it=>{
       const key=g.key+'.'+it.key, d=docs[key];
+      const btn = (d && d.path) ? `<button class="btn btn-sm" style="margin-left:8px;padding:2px 6px" onclick="App.downloadDoc('${d.path}')" title="Download Document">⬇️</button>` : '';
       html+=`<div class="doc-item ${d?'attached':''}">
         <div><span class="name">${it.label}</span>${it.optional?' <span class="opt">(if applicable)</span>':''}</div>
-        <div class="${d?'file-info':'micro'}">${d?'&#10003; '+esc(d.fileName):'Not attached'}</div>
+        <div class="${d?'file-info':'micro'}">${d?'&#10003; '+esc(d.fileName):'Not attached'}${btn}</div>
       </div>`;
     });
     html+=`</div>`;
   });
   return html;
+}
+
+async function downloadDoc(path) {
+  if(!path) return;
+  toast('Generating secure download link...','⏳');
+  const { data, error } = await supa.storage.from('candidate-documents').createSignedUrl(path, 60);
+  if(error) {
+    console.error('Download error:', error);
+    toast('Failed to generate download link.','❌');
+    return;
+  }
+  window.open(data.signedUrl, '_blank');
 }
 function renderNotifs(list){
   if(!list||!list.length) return '<p class="micro">No notifications yet.</p>';
@@ -1979,7 +2011,7 @@ window.App={
   
   showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
-  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, submitApp,
+  candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, submitApp, downloadDoc,
 };
 
 document.getElementById('brandLogo').src = LOGO_URI;
