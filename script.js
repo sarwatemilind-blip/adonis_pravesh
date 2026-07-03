@@ -1113,6 +1113,7 @@ function sExperience(){
     ${exp.map((e,i)=>`<div class="card card-pad" style="margin-bottom:10px;background:var(--paper)">
       <div class="grid-2">
         <div class="field"><label>Company</label><input type="text" name="experience[${i}].company"></div>
+        <div class="field"><label>HQ</label><input type="text" name="experience[${i}].hq"></div>
         <div class="field"><label>Position held</label><input type="text" name="experience[${i}].position"></div>
         <div class="field"><label>From (MM/YYYY)</label><input type="text" name="experience[${i}].from"></div>
         <div class="field"><label>To (MM/YYYY)</label><input type="text" name="experience[${i}].to"></div>
@@ -1241,7 +1242,7 @@ function renderAppSummary(a){
     sec('Qualifications',arrTable(a.qualifications,[{key:'education',label:'Education'},{key:'school',label:'School/Uni'},{key:'fromYear',label:'From'},{key:'toYear',label:'To'},{key:'percentage',label:'%'}])),
     sec('Training',arrTable(a.trainings,[{key:'institute',label:'Institute'},{key:'course',label:'Course'},{key:'fromP',label:'From'},{key:'toP',label:'To'}])),
     sec('Residence',`<div class="grid-2">${kv('Housing',res.type)}${kv('Own vehicle',res.ownVehicle)}</div>`),
-    sec('Experience',arrTable(a.experience,[{key:'company',label:'Company'},{key:'position',label:'Position'},{key:'from',label:'From'},{key:'to',label:'To'},{key:'startingSalary',label:'Start CTC'},{key:'finalSalary',label:'Final CTC'},{key:'employeesSupervised',label:'Supervised'},{key:'reasonLeaving',label:'Reason'}])),
+    sec('Experience',arrTable(a.experience,[{key:'company',label:'Company'},{key:'hq',label:'HQ'},{key:'position',label:'Position'},{key:'from',label:'From'},{key:'to',label:'To'},{key:'startingSalary',label:'Start CTC'},{key:'finalSalary',label:'Final CTC'},{key:'employeesSupervised',label:'Supervised'},{key:'reasonLeaving',label:'Reason'}])),
     sec('Products promoted',arrTable(a.products,[{key:'product',label:'Product'},{key:'target',label:'Target'},{key:'achieved',label:'Ach'},{key:'pctAch',label:'% Ach'},{key:'remarks',label:'Remarks'}])),
     sec('Strengths & weaknesses',`<div class="grid-2"><div><b>Strengths</b><ul>${(a.strengths||[]).filter(Boolean).map(s=>`<li>${esc(s)}</li>`).join('')||'<li>—</li>'}</ul></div><div><b>Weaknesses</b><ul>${(a.weaknesses||[]).filter(Boolean).map(s=>`<li>${esc(s)}</li>`).join('')||'<li>—</li>'}</ul></div></div><div class="grid-2">${kv('Salary expected',a.salaryExpected)}${kv('Notice period',a.noticePeriod)}</div>`),
     sec('Field sales',`${kv('Preferred territory',fs.preferredTerritory)}${kv('Why',fs.why)}${kv('Other territories',fs.otherTerritories)}${kv('Applied before',fs.appliedBefore)}${kv('Can join by',fs.joinByDate)}`),
