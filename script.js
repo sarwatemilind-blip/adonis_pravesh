@@ -49,7 +49,7 @@ const HR_VERIFY = [
 
 const STAGE_ORDER  = ['invited','submitted','under_review','interview_rated','approved','offer_sent'];
 const STAGE_LABELS = {invited:'Invited',submitted:'Application Filled',under_review:'Manager Review',
-  interview_rated:'Interview Rated',approved:'Approved',rejected:'Rejected',offer_sent:'Offer Sent'};
+  interview_rated:'Interview Rated',approved:'Approved',rejected:'Not Selected',offer_sent:'Offer Sent'};
 
 /* ─── in-memory DB (source of truth within this session) ─ */
 /* ─── Supabase Configuration ────────────────────────── */
@@ -496,7 +496,7 @@ function mgrActionPanel(r){
       <div class="field" style="margin-top:10px"><label>Internal review notes</label><textarea id="mgrNotes">${esc(r.managerReview.notes||'')}</textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-primary" onclick="App.goToRating()">${r.status==='under_review'?'Continue':'Start'} interview rating →</button>
-        <button class="btn btn-red" onclick="App.rejectModal()">Reject</button>
+        <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
       </div></div>`;
   if(r.status==='interview_rated')
     return `<div class="banner info">📨 Rating submitted — file is with HR / Admin for final decision.</div>`;
@@ -548,9 +548,9 @@ function rejectModal(){
   const root=ensureModalRoot();
   root.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)App.closeModal()">
     <div class="modal">
-      <div class="modal-head"><h3>Reject candidate</h3><button class="x-close" onclick="App.closeModal()">×</button></div>
+      <div class="modal-head"><h3>Candidate Not Selected</h3><button class="x-close" onclick="App.closeModal()">×</button></div>
       <div class="modal-body"><div class="field"><label>Reason (internal only)</label><textarea id="rejectReason"></textarea></div></div>
-      <div class="modal-foot"><button class="btn" onclick="App.closeModal()">Cancel</button><button class="btn btn-red" onclick="App.confirmReject()">Confirm reject</button></div>
+      <div class="modal-foot"><button class="btn" onclick="App.closeModal()">Cancel</button><button class="btn btn-red" onclick="App.confirmReject()">Confirm Not Selected</button></div>
     </div>
   </div>`;
 }
@@ -814,7 +814,7 @@ function renderHRDetail(){
 
 function hrDecisionPanel(r){
   if(r.status==='rejected')
-    return `<div class="banner danger">✕ Rejected by ${esc((r.hrDecision&&r.hrDecision.decidedBy)||'HR')} on ${r.hrDecision?fmtDate(r.hrDecision.decidedDate):''}${r.hrDecision&&r.hrDecision.comments?'<br>Note: '+esc(r.hrDecision.comments):''}</div>`;
+    return `<div class="banner danger">✕ Not Selected by ${esc((r.hrDecision&&r.hrDecision.decidedBy)||'HR')} on ${r.hrDecision?fmtDate(r.hrDecision.decidedDate):''}${r.hrDecision&&r.hrDecision.comments?'<br>Note: '+esc(r.hrDecision.comments):''}</div>`;
   if(r.status==='approved')
     return `<div class="card card-pad">
       <div class="banner success">🎉 Approved by ${esc((r.hrDecision&&r.hrDecision.decidedBy)||'HR')} on ${r.hrDecision?fmtDate(r.hrDecision.decidedDate):''}${r.hrDecision&&r.hrDecision.comments?'<br>Note: '+esc(r.hrDecision.comments):''}</div>
@@ -833,7 +833,7 @@ function hrDecisionPanel(r){
     <div class="field"><label>Decision notes / comments</label><textarea id="hrComments"></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="App.hrDecide('approved')">Approve &amp; finalise offer</button>
-      <button class="btn btn-red" onclick="App.hrDecide('rejected')">Reject</button>
+      <button class="btn btn-red" onclick="App.hrDecide('rejected')">Not Selected</button>
     </div></div>`;
 }
 function hrDecide(decision){
