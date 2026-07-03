@@ -143,6 +143,7 @@
 
   .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
   .badge-invited{background:var(--blue-bg);color:var(--teal-deep);}
+  .badge-in_progress{background:#E0F2FE;color:#0369A1;}
   .badge-submitted{background:#EFEAFB;color:#5B3FA6;}
   .badge-under_review{background:var(--amber-bg);color:var(--amber);}
   .badge-interview_rated{background:#FDEFE3;color:#A65A0E;}
@@ -324,8 +325,8 @@ const HR_VERIFY = [
   "Two passport size recent photographs (with tie)",
 ];
 
-const STAGE_ORDER  = ['invited','submitted','under_review','interview_rated','approved','offer_sent'];
-const STAGE_LABELS = {invited:'Invited',submitted:'Form Filled',under_review:'Manager Approval Pending',
+const STAGE_ORDER  = ['invited','in_progress','submitted','under_review','interview_rated','approved','offer_sent'];
+const STAGE_LABELS = {invited:'Invited',in_progress:'Form Filling',submitted:'Form Filled',under_review:'Manager Approval Pending',
   interview_rated:'Interview Rated',approved:'Approved',rejected:'Rejected',offer_sent:'Offer Sent'};
 
 /* ─── in-memory DB (source of truth within this session) ─ */
@@ -694,20 +695,25 @@ async function deleteCandidate(id) {
 
 function candTable(list,role){
   const sorted=list.slice().sort((a,b)=>b.updatedAt-a.updatedAt);
-  return `<table class="tbl"><thead><tr><th>Candidate</th><th>Position</th><th>Code</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
-    ${sorted.map(c=>`<tr>
-      <td><strong>${esc(c.name)}</strong><br><span class="micro">${esc(c.email||'')}</span></td>
-      <td>${esc(c.position||'—')}</td>
-      <td><span class="codepill" style="font-size:11px;padding:4px 8px">${c.id}</span>
-          <button class="btn btn-sm btn-ghost" style="padding:2px 4px;margin-left:4px" onclick="App.copyLink('${c.id}')" title="Copy Link">🔗</button>
-      </td>
-      <td>${statusBadge(c.status)}</td>
-      <td class="micro">${fmtDate(c.updatedAt)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-sm" onclick="App.${role==='hr'?'openHR':'openManager'}('${c.id}')">Open →</button>
-        <button class="btn btn-sm btn-red" style="padding:4px 8px;margin-left:4px" onclick="App.deleteCandidate('${c.id}')" title="Delete Candidate">🗑️</button>
-      </td>
-    </tr>`).join('')}
+  const showMgr=role==='hr';
+  return `<table class="tbl"><thead><tr><th>Candidate</th>${showMgr?'<th>Hiring Manager</th>':''}<th>Position</th><th>Code</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
+    ${sorted.map(c=>{
+      const mgrName=c.managerId&&DB.managers[c.managerId]?DB.managers[c.managerId].name:'—';
+      return `<tr>
+        <td><strong>${esc(c.name)}</strong><br><span class="micro">${esc(c.email||'')}</span></td>
+        ${showMgr?`<td><strong>${esc(mgrName)}</strong></td>`:''}
+        <td>${esc(c.position||'—')}</td>
+        <td><span class="codepill" style="font-size:11px;padding:4px 8px">${c.id}</span>
+            <button class="btn btn-sm btn-ghost" style="padding:2px 4px;margin-left:4px" onclick="App.copyLink('${c.id}')" title="Copy Link">🔗</button>
+        </td>
+        <td>${statusBadge(c.status)}</td>
+        <td class="micro">${fmtDate(c.updatedAt)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="App.${role==='hr'?'openHR':'openManager'}('${c.id}')">Open →</button>
+          ${role==='hr'?`<button class="btn btn-sm btn-red" style="padding:4px 8px;margin-left:4px" onclick="App.deleteCandidate('${c.id}')" title="Delete Candidate">🗑️</button>`:''}
+        </td>
+      </tr>`;
+    }).join('')}
   </tbody></table>`;
 }
 
@@ -803,9 +809,10 @@ function renderManagerDetail(){
 }
 
 function mgrActionPanel(r){
-  if(r.status==='invited') {
+  if(r.status==='invited' || r.status==='in_progress') {
+    const bannerText = r.status==='in_progress' ? '⏳ Candidate is filling the form.' : '⏳ Waiting for candidate.';
     const link = window.location.origin + window.location.pathname + '#candidate/' + r.id;
-    return `<div class="card card-pad"><div class="banner info">⏳ Waiting for candidate. Share code: <span class="codepill">${r.id}</span></div>
+    return `<div class="card card-pad"><div class="banner info">${bannerText} Share code: <span class="codepill">${r.id}</span></div>
       <div style="margin-top:10px;display:flex;gap:10px">
         <button class="btn btn-sm" onclick="App.resendInvite()">Resend invite notification</button>
         <button class="btn btn-sm btn-primary" onclick="App.copyLink('${r.id}')">📋 Copy direct link</button>
@@ -989,6 +996,7 @@ function hrLogout(){ SESSION.isAdmin=false; SESSION.managerName=null; saveSessio
 /* ─── HR DASHBOARD ─────────────────────────────────────── */
 function renderHRDashboard(){
   const pending=DB.index.filter(c=>c.status==='interview_rated');
+  const pendingManager=DB.index.filter(c=>c.status==='submitted'||c.status==='under_review');
   const mgrList=Object.values(DB.managers);
   document.getElementById('app').innerHTML=`
     <div class="page-head">
@@ -1004,7 +1012,7 @@ function renderHRDashboard(){
     <!-- stats -->
     <div class="grid-4" style="margin-bottom:18px">
       ${statCard('HR Approval Pending',pending.length)}
-      ${statCard('Manager Approval Pending',DB.index.filter(c=>c.status==='submitted'||c.status==='under_review').length)}
+      ${statCard('Manager Approval Pending',pendingManager.length)}
       ${statCard('Approved',DB.index.filter(c=>c.status==='approved').length)}
       ${statCard('Total tracked',DB.index.length)}
     </div>
@@ -1030,6 +1038,11 @@ function renderHRDashboard(){
     ${pending.length ? `<div class="card" style="margin-bottom:18px">
       <div class="card-head"><h3>Awaiting HR decision</h3></div>
       <div class="card-pad" style="padding-top:8px">${candTable(pending,'hr')}</div>
+    </div>` : ''}
+    <!-- pending manager approvals -->
+    ${pendingManager.length ? `<div class="card" style="margin-bottom:18px">
+      <div class="card-head"><h3>Awaiting Manager Review</h3><span class="micro">${pendingManager.length} pending</span></div>
+      <div class="card-pad" style="padding-top:8px">${candTable(pendingManager,'hr')}</div>
     </div>` : ''}
     <!-- all candidates -->
     <div class="card">
@@ -1237,7 +1250,11 @@ function candidateAccess(){
   REC=rec;
   if(!REC.application.position) REC.application.position=REC.position;
   if(!REC.application.source)   REC.application.source=REC.source;
-  VIEW.screen = REC.status==='invited' ? 'wizard' : 'status';
+  if(REC.status==='invited'){
+    REC.status='in_progress';
+    saveRec();
+  }
+  VIEW.screen = (REC.status==='invited' || REC.status==='in_progress') ? 'wizard' : 'status';
   VIEW.step=0;
   render();
 }
@@ -2163,43 +2180,41 @@ document.getElementById('brandLogo').src = LOGO_URI;
 
 (async function boot(){
   await loadFromStorage();
-  let m = null;
-  // Prioritize active HR/Manager sessions over candidate hash links
-  if (SESSION.isAdmin || SESSION.managerId) {
+  const hash = window.location.hash;
+  let m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
+  
+  if (m) {
+    // Handle deep-link hash for candidates: #candidate/CODE
+    const code = m[1].toUpperCase();
+    const rec = DB.candidates[code];
+    if(rec){
+      REC = rec;
+      if(!REC.application.position) REC.application.position = REC.position;
+      if(!REC.application.source)   REC.application.source   = REC.source;
+      VIEW.role   = 'candidate';
+      if(REC.status === 'invited'){
+        REC.status = 'in_progress';
+        saveRec();
+      }
+      VIEW.screen = (REC.status === 'invited' || REC.status === 'in_progress') ? 'wizard' : 'status';
+      VIEW.step   = 0;
+    } else {
+      // code not yet in memory (cold load) — show entry with pre-filled code
+      VIEW.role   = 'candidate';
+      VIEW.screen = 'entry';
+      setTimeout(()=>{
+        const el = document.getElementById('accessInput');
+        if(el){ el.value = code; }
+      }, 100);
+    }
+  } else if (SESSION.isAdmin || SESSION.managerId) {
+    // Restore active HR/Manager sessions if no candidate hash
     if (SESSION.isAdmin) {
       VIEW.role = 'hr';
       VIEW.screen = 'dashboard';
     } else {
       VIEW.role = 'manager';
       VIEW.screen = 'dashboard';
-    }
-    // Clear hash so it doesn't stay in the URL
-    if (window.location.hash.startsWith('#candidate')) {
-      history.replaceState(null, '', window.location.pathname);
-    }
-  } else {
-    // Handle deep-link hash for candidates: #candidate/CODE
-    const hash = window.location.hash;
-    m = hash.match(/^#candidate\/([A-Z0-9]{6})$/i);
-    if(m){
-      const code = m[1].toUpperCase();
-      const rec = DB.candidates[code];
-      if(rec){
-        REC = rec;
-        if(!REC.application.position) REC.application.position = REC.position;
-        if(!REC.application.source)   REC.application.source   = REC.source;
-        VIEW.role   = 'candidate';
-        VIEW.screen = REC.status === 'invited' ? 'wizard' : 'status';
-        VIEW.step   = 0;
-      } else {
-        // code not yet in memory (cold load) — show entry with pre-filled code
-        VIEW.role   = 'candidate';
-        VIEW.screen = 'entry';
-        setTimeout(()=>{
-          const el = document.getElementById('accessInput');
-          if(el){ el.value = code; }
-        }, 100);
-      }
     }
   }
   render();
