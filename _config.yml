@@ -1,0 +1,16 @@
+exclude:
+  - node_modules
+  - supabase
+  - test-extract.js
+  - test-extract2.js
+  - test-extract3.js
+  - test-render.js
+  - test-jsdom.js
+  - test-insert.js
+  - test-select.js
+  - test-select-all.js
+  - test-select-usernames.js
+  - gen-mock.js
+  - gen-mock3.js
+  - clean-db.js
+  - run-schema.js
