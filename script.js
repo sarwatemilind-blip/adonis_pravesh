@@ -562,6 +562,35 @@ function confirmReject(){
   saveRec(); closeModal(); render();
 }
 
+function showCorrectionModal(){
+  const root=ensureModalRoot();
+  root.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)App.closeModal()">
+    <div class="modal">
+      <div class="modal-head"><h3>Ask Candidate for Correction</h3><button class="x-close" onclick="App.closeModal()">×</button></div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Issues / Correction instructions (will be shown to candidate)</label>
+          <textarea id="correctionNotes" style="min-height:100px" placeholder="Describe the corrections needed (e.g. Please upload a clear photo of PAN card)"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary" style="background:#d97706;border-color:#d97706;color:white" onclick="App.confirmCorrection()">Send back for correction</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function confirmCorrection(){
+  const notes=(document.getElementById('correctionNotes')||{}).value||'';
+  if(!notes.trim()){ toast('Please specify what corrections are needed.','⚠️'); return; }
+  REC.status='in_progress';
+  if(!REC.application) REC.application = {};
+  REC.application.correctionNotes = notes;
+  addNotif(REC, REC.email, 'Correction required for your onboarding application', 'in_progress');
+  saveRec(); closeModal(); render();
+}
+
 /* ─── RATING SHEET ─────────────────────────────────────── */
 function renderRatingForm(){
   const r=REC, rs=r.ratingSheet;
@@ -1653,7 +1682,7 @@ window.App={
     const res = await supa.functions.invoke('send-email', { body: { to: log.recipient, subject: log.subject, body: 'Retrying email...', candidateId: log.candidate_id } });
     if (res.error) toast('Retry failed', 'err');
     else toast('Retry triggered');
-  }, rejectModal, confirmReject,
+  }, rejectModal, confirmReject, showCorrectionModal, confirmCorrection,
   setDocVerify, submitRating,
   hrLogin, hrLogout, openHR, backToHRDash, hrDecide,
   showOfferLetterModal, previewOffer, sendOffer, copyOfferText, copyLink, showEmailBody,

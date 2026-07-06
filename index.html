@@ -825,6 +825,7 @@ function mgrActionPanel(r){
       <div class="field" style="margin-top:10px"><label>Internal review notes</label><textarea id="mgrNotes">${esc((r.managerReview && r.managerReview.notes) || '')}</textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-primary" onclick="App.goToRating()">${r.status==='under_review'?'Continue':'Start'} interview rating →</button>
+        <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
         <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
       </div></div>`;
   if(r.status==='interview_rated')
@@ -889,6 +890,35 @@ function confirmReject(){
   REC.status='rejected';
   REC.hrDecision={decision:'rejected',comments:reason||'Not progressing at this time.',decidedBy:SESSION.managerName||'Hiring Manager',decidedDate:Date.now()};
   addNotif(REC, REC.email, 'Update on your application to Adonis Laboratories', 'rejected');
+  saveRec(); closeModal(); render();
+}
+
+function showCorrectionModal(){
+  const root=ensureModalRoot();
+  root.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)App.closeModal()">
+    <div class="modal">
+      <div class="modal-head"><h3>Ask Candidate for Correction</h3><button class="x-close" onclick="App.closeModal()">×</button></div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Issues / Correction instructions (will be shown to candidate)</label>
+          <textarea id="correctionNotes" style="min-height:100px" placeholder="Describe the corrections needed (e.g. Please upload a clear photo of PAN card)"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary" style="background:#d97706;border-color:#d97706;color:white" onclick="App.confirmCorrection()">Send back for correction</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function confirmCorrection(){
+  const notes=(document.getElementById('correctionNotes')||{}).value||'';
+  if(!notes.trim()){ toast('Please specify what corrections are needed.','⚠️'); return; }
+  REC.status='in_progress';
+  if(!REC.application) REC.application = {};
+  REC.application.correctionNotes = notes;
+  addNotif(REC, REC.email, 'Correction required for your onboarding application', 'in_progress');
   saveRec(); closeModal(); render();
 }
 
@@ -1196,6 +1226,7 @@ function hrDecisionPanel(r){
     <div class="field"><label>Decision notes / comments</label><textarea id="hrComments"></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="App.hrDecide('approved')">Approve &amp; finalise offer</button>
+      <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
       <button class="btn btn-red" onclick="App.hrDecide('rejected')">Not Selected</button>
     </div></div>`;
 }
@@ -1268,6 +1299,7 @@ function renderCandidateWizard(){
       <button class="btn btn-ghost" onclick="App.exitCandSession()">Exit</button>
     </div>
     ${stepperHTML(REC.status)}
+    ${(REC.application && REC.application.correctionNotes) ? `<div class="banner info" style="margin-bottom:16px;background:#FEF3C7;color:#92400E;border-color:#F59E0B;border-left:4px solid #D97706"><strong>⚠️ Correction requested:</strong> ${esc(REC.application.correctionNotes)}</div>` : ''}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line)">
       ${WIZ.map((s,i)=>`<span style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;background:${i===VIEW.step?'var(--teal-deep)':i<VIEW.step?'var(--green-bg)':'var(--paper)'};color:${i===VIEW.step?'white':i<VIEW.step?'var(--green)':'var(--slate)'};border:1px solid ${i===VIEW.step?'var(--teal-deep)':i<VIEW.step?'#BCE0CB':'var(--line)'}">${i+1}. ${s.title}</span>`).join('')}
     </div>
@@ -1332,6 +1364,7 @@ function submitApp(){
   if(!(d.allDisclosed&&d.lettersSubmitted&&d.salesAuthentic&&d.consentVerification)){ toast('Please confirm all declaration checkboxes.','⚠️'); VIEW.step=WIZ.findIndex(s=>s.id==='declaration'); render(); return; }
   if(!a.signature){ toast('Please type your full name as your signature.','⚠️'); VIEW.step=WIZ.findIndex(s=>s.id==='declaration'); render(); return; }
   REC.status='submitted';
+  if(REC.application) delete REC.application.correctionNotes;
   addNotif(REC,'Hiring Manager',`New application submitted by ${REC.name} for ${REC.position}`,'submitted');
   saveRec(); VIEW.screen='done'; render();
 }
@@ -2167,7 +2200,7 @@ window.App={
     const res = await supa.functions.invoke('send-email', { body: { to: log.recipient, subject: log.subject, body: 'Retrying email...', candidateId: log.candidate_id } });
     if (res.error) toast('Retry failed', 'err');
     else toast('Retry triggered');
-  }, rejectModal, confirmReject,
+  }, rejectModal, confirmReject, showCorrectionModal, confirmCorrection,
   setDocVerify, submitRating,
   hrLogin, hrLogout, openHR, backToHRDash, hrDecide,
   showOfferLetterModal, previewOffer, sendOffer, copyOfferText, copyLink, showEmailBody,
