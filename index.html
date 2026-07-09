@@ -293,6 +293,7 @@ const DOCUMENT_GROUPS = [
     {key:'aadhaar',     label:'Aadhaar Card'},
     {key:'pan',         label:'PAN Card'},
     {key:'photo',       label:'Passport Size Photograph'},
+    {key:'signaturePhoto', label:"Candidate's Signature Photo", optional:true},
   ]},
   {key:'education', title:'Educational Documents', items:[
     {key:'certificates',label:'All Academic Certificates & Marksheets'},
@@ -1617,6 +1618,27 @@ function sReferences(){
   </fieldset>`;
 }
 function sDeclaration(){
+  const docs = REC.documents || {};
+  const key = 'personal.signaturePhoto';
+  let d = docs[key];
+  if(d && !Array.isArray(d)) d = [d];
+  let sigPhotoHtml = '';
+  if(d && d.length > 0) {
+    sigPhotoHtml = d.map((file, idx) => `
+      <div class="file-info" style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;color:var(--green)">
+        &#10003; ${esc(file.fileName)}
+        <button type="button" class="btn btn-sm" style="padding:1px 4px;font-size:10px;line-height:1;margin-left:5px" onclick="App.removeDoc('${key}', ${idx})" title="Remove file">❌</button>
+      </div>
+    `).join('');
+  } else {
+    sigPhotoHtml = `
+      <div class="file-btn btn btn-sm" style="position:relative;overflow:hidden;display:inline-block;cursor:pointer">
+        Attach Signature Photo
+        <input type="file" onchange="App.attachDoc(event,'${key}')" style="position:absolute;left:0;top:0;opacity:0;cursor:pointer;width:100%;height:100%">
+      </div>
+    `;
+  }
+
   return `<fieldset class="section"><legend>Legal proceedings</legend>
     ${ynField('Are you currently or previously involved in any criminal / civil / matrimonial or other legal proceedings, or has an FIR been filed against you?','legalProceedings')}
     <div class="field"><label>If yes, provide complete details</label><textarea name="legalDetails"></textarea></div>
@@ -1630,6 +1652,10 @@ function sDeclaration(){
     <div class="grid-2">
       <div class="field"><label>Signature — type your full name</label><input type="text" name="signature"></div>
       <div class="field"><label>Date</label><input type="date" name="signatureDate"></div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Upload Signature Photo (Optional)</label>
+      <div style="margin-top:4px">${sigPhotoHtml}</div>
     </div>
   </fieldset>`;
 }
@@ -1670,11 +1696,17 @@ function sDocuments(){
 }
 
 /* ─── SHARED SUMMARY RENDERERS ─────────────────────────── */
-function renderAppSummary(a){
+function renderAppSummary(a, sigPhotoDataUrl){
   a=a||{};
   const p=a.personal||{}, m=a.medical||{}, res=a.residential||{}, fs=a.fieldSales||{}, em=a.emergency||{};
   if(!p.fullName&&!a.position) return '<p class="micro">No application data yet.</p>';
   const sec=(t,html)=>`<details style="margin-bottom:6px"><summary style="cursor:pointer;font-weight:700;font-size:13px;padding:8px 0">${t}</summary><div style="padding:4px 4px 16px;font-size:13px">${html}</div></details>`;
+  const sigHtml = sigPhotoDataUrl 
+    ? `<div style="margin-top: 10px; margin-bottom: 5px;">
+         <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Uploaded Signature:</div>
+         <img src="${sigPhotoDataUrl}" style="max-height: 50px; max-width: 150px; object-fit: contain; border-bottom: 1px solid #ccc;" />
+       </div>`
+    : '';
   return [
     sec('Position',`<div class="grid-2">${kv('Position',a.position)}${kv('Source',a.source)}${kv('Knows someone',a.knowsSomeone)}</div>`),
     sec('Personal data',`<div class="grid-2">${[['Full name',p.fullName],["Father/Husband",p.fatherHusband],['DOB',p.dob],['Place of birth',p.placeOfBirth],['Nationality',p.nationality],['Marital status',p.maritalStatus],['PAN',p.pan],['Aadhaar',p.aadhaar],['Mobile',p.mobile],['Email',p.email],['Bank & branch',p.bankName],['Account/IFSC',(p.bankAccount||'—')+'/'+(p.ifsc||'—')],['UAN/PF/ESIC',(p.uan||'—')+'/'+(p.pf||'—')+'/'+(p.esic||'—')]].map(([l,v])=>kv(l,v)).join('')}</div><div style="margin-top:6px">${kv('Correspondence',(p.corrAddress||'—')+' '+(p.corrPin||''))}${kv('Permanent',(p.permAddress||'—')+' '+(p.permPin||''))}</div>`),
@@ -1690,7 +1722,7 @@ function renderAppSummary(a){
     sec('Field sales',`${kv('Preferred territory',fs.preferredTerritory)}${kv('Why',fs.why)}${kv('Other territories',fs.otherTerritories)}${kv('Applied before',fs.appliedBefore)}${kv('Can join by',fs.joinByDate)}`),
     sec('References',arrTable(a.references,[{key:'name',label:'Name'},{key:'designation',label:'Designation'},{key:'company',label:'Company'},{key:'email',label:'Email'},{key:'phoneO',label:'Phone'},{key:'mobile',label:'Mobile'}])),
     sec('Emergency contact',`<div class="grid-2">${kv('Name',em.name)}${kv('Relation',em.relation)}${kv('Mobile',em.mobile)}${kv('Landline',em.landline)}</div>`),
-    sec('Legal & declaration',`${kv('Legal proceedings',a.legalProceedings)}${a.legalProceedings==='Yes'?kv('Details',a.legalDetails):''}<div class="divider"></div>${kv('Signature',a.signature)}${kv('Date',a.signatureDate)}`),
+    sec('Legal & declaration',`${kv('Legal proceedings',a.legalProceedings)}${a.legalProceedings==='Yes'?kv('Details',a.legalDetails):''}<div class="divider"></div>${sigHtml}${kv('Signature',a.signature)}${kv('Date',a.signatureDate)}`),
   ].join('');
 }
 function renderDocsRO(docs){
@@ -1739,18 +1771,101 @@ async function downloadCandidatePDF(id) {
   const r = DB.candidates[id];
   if(!r) return;
   toast('Generating PDF...','⏳');
+
+  let photoDataUrl = '';
+  let sigPhotoDataUrl = '';
+
+  async function getBase64Image(filePath) {
+    if(!filePath) return '';
+    try {
+      const { data, error } = await supa.storage.from('candidate-documents').createSignedUrl(filePath, 60);
+      if(error || !data) return '';
+      const response = await fetch(data.signedUrl);
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(blob);
+      });
+    } catch(e) {
+      console.error('Error fetching image for PDF:', e);
+      return '';
+    }
+  }
+
+  const photoDocs = r.documents && r.documents['personal.photo'];
+  const photoFile = Array.isArray(photoDocs) ? photoDocs[0] : photoDocs;
+  if(photoFile && photoFile.path) {
+    photoDataUrl = await getBase64Image(photoFile.path);
+  }
+
+  const sigDocs = r.documents && r.documents['personal.signaturePhoto'];
+  const sigFile = Array.isArray(sigDocs) ? sigDocs[0] : sigDocs;
+  if(sigFile && sigFile.path) {
+    sigPhotoDataUrl = await getBase64Image(sigFile.path);
+  }
   
   const el = document.createElement('div');
   el.style.padding = '20px';
   el.style.fontFamily = 'sans-serif';
   el.style.color = '#333';
-  
+
+  const logoHtml = `<img src="${LOGO_URI}" style="height: 50px; max-width: 180px; object-fit: contain;" />`;
+  const photoHtml = photoDataUrl 
+    ? `<img src="${photoDataUrl}" style="height: 100px; width: 85px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 4px;" />` 
+    : `<div style="height: 100px; width: 85px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999; border-radius: 4px; text-align: center;">No Photo</div>`;
+
   el.innerHTML = `
-    <h1 style="margin-bottom: 5px; font-size: 24px;">Candidate Application: ${esc(r.name)}</h1>
-    <p style="margin-top: 0; color: #666; margin-bottom: 20px;">Position: ${esc(r.position)} | Code: ${r.id}</p>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+      <tr>
+        <td style="width: 33%; vertical-align: top; text-align: left; padding: 0;">
+          ${logoHtml}
+        </td>
+        <td style="width: 34%; vertical-align: middle; text-align: center; padding: 0;">
+          <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #222; text-transform: uppercase; letter-spacing: 0.5px;">Employment Form</h1>
+          <p style="margin: 4px 0 0 0; color: #666; font-size: 12px; font-weight: 600;">Code: ${r.id}</p>
+        </td>
+        <td style="width: 33%; vertical-align: top; text-align: right; padding: 0;">
+          ${photoHtml}
+        </td>
+      </tr>
+    </table>
+    <div style="font-size: 14px; margin-bottom: 20px; line-height: 1.4;">
+      <strong>Candidate Name:</strong> ${esc(r.name)} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Position Applied:</strong> ${esc(r.position)}
+    </div>
     <div style="border-top: 1px solid #ccc; margin-bottom: 20px;"></div>
   `;
-  el.innerHTML += renderAppSummary(r.application);
+  el.innerHTML += renderAppSummary(r.application, sigPhotoDataUrl);
+
+  // Append a dedicated signature block at the bottom of the PDF
+  const sigBlockHtml = sigPhotoDataUrl
+    ? `<img src="${sigPhotoDataUrl}" style="display:block; max-height: 60px; max-width: 180px; object-fit: contain; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 6px;" />`
+    : `<div style="border-bottom: 2px solid #333; width: 220px; margin-bottom: 6px; height: 55px;"></div>`;
+
+  const sigNameHtml = `<div style="font-size: 13px; font-weight: 600;">${esc(r.name)}</div>`;
+  const sigDateHtml = (r.application && r.application.signatureDate)
+    ? `<div style="font-size: 11px; color: #666; margin-top: 3px;">Date: ${esc(r.application.signatureDate)}</div>`
+    : '';
+  const sigBlock = document.createElement('div');
+  sigBlock.style.cssText = 'margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd;';
+  sigBlock.innerHTML = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="vertical-align: bottom; padding: 0; width: 50%;">
+          ${sigBlockHtml}
+          ${sigNameHtml}
+          <div style="font-size: 11px; color: #666; margin-top: 2px;">Candidate's Signature</div>
+          ${sigDateHtml}
+        </td>
+        <td style="vertical-align: bottom; padding: 0; width: 50%; text-align: right;">
+          <div style="border-bottom: 2px solid #333; width: 220px; display: inline-block; margin-bottom: 6px; margin-left: auto;"></div>
+          <div style="font-size: 13px; font-weight: 600;">Authorised Signatory</div>
+          <div style="font-size: 11px; color: #666; margin-top: 2px;">Adonis Laboratories Pvt. Ltd.</div>
+        </td>
+      </tr>
+    </table>`;
+  el.appendChild(sigBlock);
   
   // Expand all details blocks
   const details = el.querySelectorAll('details');
