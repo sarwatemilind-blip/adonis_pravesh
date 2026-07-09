@@ -1696,17 +1696,11 @@ function sDocuments(){
 }
 
 /* ─── SHARED SUMMARY RENDERERS ─────────────────────────── */
-function renderAppSummary(a, sigPhotoDataUrl){
+function renderAppSummary(a){
   a=a||{};
   const p=a.personal||{}, m=a.medical||{}, res=a.residential||{}, fs=a.fieldSales||{}, em=a.emergency||{};
   if(!p.fullName&&!a.position) return '<p class="micro">No application data yet.</p>';
   const sec=(t,html)=>`<details style="margin-bottom:6px"><summary style="cursor:pointer;font-weight:700;font-size:13px;padding:8px 0">${t}</summary><div style="padding:4px 4px 16px;font-size:13px">${html}</div></details>`;
-  const sigHtml = sigPhotoDataUrl 
-    ? `<div style="margin-top: 10px; margin-bottom: 5px;">
-         <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Uploaded Signature:</div>
-         <img src="${sigPhotoDataUrl}" style="max-height: 50px; max-width: 150px; object-fit: contain; border-bottom: 1px solid #ccc;" />
-       </div>`
-    : '';
   return [
     sec('Position',`<div class="grid-2">${kv('Position',a.position)}${kv('Source',a.source)}${kv('Knows someone',a.knowsSomeone)}</div>`),
     sec('Personal data',`<div class="grid-2">${[['Full name',p.fullName],["Father/Husband",p.fatherHusband],['DOB',p.dob],['Place of birth',p.placeOfBirth],['Nationality',p.nationality],['Marital status',p.maritalStatus],['PAN',p.pan],['Aadhaar',p.aadhaar],['Mobile',p.mobile],['Email',p.email],['Bank & branch',p.bankName],['Account/IFSC',(p.bankAccount||'—')+'/'+(p.ifsc||'—')],['UAN/PF/ESIC',(p.uan||'—')+'/'+(p.pf||'—')+'/'+(p.esic||'—')]].map(([l,v])=>kv(l,v)).join('')}</div><div style="margin-top:6px">${kv('Correspondence',(p.corrAddress||'—')+' '+(p.corrPin||''))}${kv('Permanent',(p.permAddress||'—')+' '+(p.permPin||''))}</div>`),
@@ -1722,7 +1716,7 @@ function renderAppSummary(a, sigPhotoDataUrl){
     sec('Field sales',`${kv('Preferred territory',fs.preferredTerritory)}${kv('Why',fs.why)}${kv('Other territories',fs.otherTerritories)}${kv('Applied before',fs.appliedBefore)}${kv('Can join by',fs.joinByDate)}`),
     sec('References',arrTable(a.references,[{key:'name',label:'Name'},{key:'designation',label:'Designation'},{key:'company',label:'Company'},{key:'email',label:'Email'},{key:'phoneO',label:'Phone'},{key:'mobile',label:'Mobile'}])),
     sec('Emergency contact',`<div class="grid-2">${kv('Name',em.name)}${kv('Relation',em.relation)}${kv('Mobile',em.mobile)}${kv('Landline',em.landline)}</div>`),
-    sec('Legal & declaration',`${kv('Legal proceedings',a.legalProceedings)}${a.legalProceedings==='Yes'?kv('Details',a.legalDetails):''}<div class="divider"></div>${sigHtml}${kv('Signature',a.signature)}${kv('Date',a.signatureDate)}`),
+    sec('Legal & declaration',`${kv('Legal proceedings',a.legalProceedings)}${a.legalProceedings==='Yes'?kv('Details',a.legalDetails):''}${kv('Signature',a.signature)}${kv('Date',a.signatureDate)}`),
   ].join('');
 }
 function renderDocsRO(docs){
@@ -1836,7 +1830,7 @@ async function downloadCandidatePDF(id) {
     </div>
     <div style="border-top: 1px solid #ccc; margin-bottom: 20px;"></div>
   `;
-  el.innerHTML += renderAppSummary(r.application, sigPhotoDataUrl);
+  el.innerHTML += renderAppSummary(r.application);
 
   // Append a dedicated signature block at the bottom of the PDF
   const sigBlockHtml = sigPhotoDataUrl
