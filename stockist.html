@@ -2527,6 +2527,61 @@ document.getElementById('brandLogo').src = LOGO_URI;
 <script>
 // OVERRIDES FOR STOCKIST
 
+window.persistCandidate = async function(record) {
+  if (!isOnline) {
+    offlineQueue.push({ table: 'stockists', data: record });
+    return;
+  }
+  try {
+    const { error } = await supa.from('stockists').upsert({
+      id: record.id,
+      manager_id: record.managerId || null,
+      firm_name: record.application?.firm_name || 'New Stockist',
+      status: record.status || 'draft',
+      application: record.application || {},
+      documents: record.documents || {},
+      manager_review: record.ratingSheet || {},
+      hr_decision: record.hrDecision || {}
+    });
+    if (error) console.error("Error upserting stockist:", error);
+  } catch(e) {
+    console.error("Network error upserting stockist:", e);
+  }
+};
+
+App.attachDoc = (e, id) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    if (!REC.documents[id]) REC.documents[id] = [];
+    else if (typeof REC.documents[id] === 'string') REC.documents[id] = [REC.documents[id]];
+    REC.documents[id].push(ev.target.result);
+    saveRec();
+    render();
+  };
+  reader.readAsDataURL(file);
+};
+
+App.removeDoc = (id, index) => {
+  if (Array.isArray(REC.documents[id])) {
+    REC.documents[id].splice(index, 1);
+    if (REC.documents[id].length === 0) delete REC.documents[id];
+  } else {
+    delete REC.documents[id];
+  }
+  saveRec();
+  render();
+};
+
+App.viewDoc = (id, idx) => {
+  const doc = Array.isArray(REC.documents[id]) ? REC.documents[id][idx] : REC.documents[id];
+  if(doc) {
+    const win = window.open();
+    win.document.write(`<iframe src="${doc}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+  }
+};
+
 App.updateCompany = (idx, field, val) => {
   if (!REC.application.other_companies) REC.application.other_companies = [];
   if (!REC.application.other_companies[idx]) REC.application.other_companies[idx] = {};
@@ -2683,20 +2738,23 @@ window.renderCandidateWizard = function() {
     `;
   } else if (VIEW.step === 3) {
     const docs = ['Aadhar Card', 'Drug License', 'GST Certificate', 'PAN Card', 'Partnership Deed', 'Photographs of Proprietor', 'Stockist Signature'];
-    content = `<h2>Documents & Signatures</h2><p>Upload the required proofs and a photo of the Stockist's signature.</p>`;
+    content = `<h2>Documents & Signatures</h2><p>Upload the required proofs and a photo of the Stockist's signature. You can upload multiple files per category.</p>`;
     docs.forEach(d => {
       const id = d.replace(/[^a-zA-Z]/g,'');
-      const doc = r.documents[id];
+      const docData = r.documents[id];
+      const docList = Array.isArray(docData) ? docData : (docData ? [docData] : []);
+      
       content += `
         <div class="card card-pad" style="margin-bottom:10px">
           <div style="font-weight:500;margin-bottom:6px">${d}</div>
-          ${doc ? 
-            `<div style="display:flex;align-items:center;gap:10px">
-              <span style="color:#10b981;font-weight:bold">✓ Uploaded</span>
-              <button class="btn btn-sm btn-ghost" onclick="App.downloadDoc('${id}')">View</button>
-              <button class="btn btn-sm btn-red" onclick="App.removeDoc('${id}')">Remove</button>
-             </div>` 
-          : `<input type="file" onchange="App.attachDoc(event, '${id}')" class="inp">`}
+          ${docList.map((doc, idx) => `
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="color:#10b981;font-weight:bold">✓ Document ${idx+1}</span>
+              <button class="btn btn-sm btn-ghost" onclick="App.viewDoc('${id}', ${idx})">View</button>
+              <button class="btn btn-sm btn-red" onclick="App.removeDoc('${id}', ${idx})">Remove</button>
+            </div>
+          `).join('')}
+          <input type="file" onchange="App.attachDoc(event, '${id}')" class="inp" title="Upload a document">
         </div>
       `;
     });
@@ -2705,7 +2763,7 @@ window.renderCandidateWizard = function() {
       <h2>Submit Stockist Application</h2>
       <p>Please review all fields before submitting. Once submitted, this application will be sent to your RSM for approval.</p>
       <div class="field" style="margin-top:20px">
-        <label><input type="checkbox" id="decl" onchange="REC.application.declared=this.checked; saveRec();"> I confirm the details provided are accurate and the documents have been verified.</label>
+        <label><input type="checkbox" id="decl" ${r.application.declared?'checked':''} onchange="REC.application.declared=this.checked; saveRec(); render();"> I confirm the details provided are accurate and the documents have been verified.</label>
       </div>
     `;
   }
