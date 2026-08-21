@@ -1099,8 +1099,6 @@ function midLevelApprove() {
   saveRec(); render();
 }
 
-window.App.midLevelApprove = midLevelApprove;
-
 /* ─── HR / ADMIN LOGIN ─────────────────────────────────── */
 function renderHRLogin(){
   document.getElementById('app').innerHTML=`
@@ -2410,7 +2408,7 @@ window.App={
     if (res.error) toast('Retry failed', 'err');
     else toast('Retry triggered');
   }, rejectModal, confirmReject, showCorrectionModal, confirmCorrection,
-  setDocVerify, submitRating,
+  setDocVerify, submitRating, midLevelApprove,
   hrLogin, hrLogout, openHR, backToHRDash, hrDecide,
   showOfferLetterModal, previewOffer, sendOffer, copyOfferText, copyLink, showEmailBody,
   
