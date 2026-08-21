@@ -2527,6 +2527,86 @@ document.getElementById('brandLogo').src = LOGO_URI;
 <script>
 // OVERRIDES FOR STOCKIST
 
+window.renderStockistData = function(r) {
+  let html = `<div class="card" style="margin-top:16px"><div class="card-head"><h3>Application Data</h3></div><div class="card-pad">`;
+  
+  const app = r.application || {};
+  
+  const section = (title, fields) => {
+    let s = `<h4 style="margin-top:15px;margin-bottom:8px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:4px">${title}</h4><div class="grid-2">`;
+    fields.forEach(f => {
+      s += `<div style="margin-bottom:8px"><div style="font-size:11px;color:#64748b;text-transform:uppercase">${f[0]}</div><div style="font-size:14px;color:#1e293b;font-weight:500">${app[f[1]] || '-'}</div></div>`;
+    });
+    s += `</div>`;
+    return s;
+  };
+  
+  html += section('A. Basic Info', [
+    ['Firm Name', 'firm_name'], ['Address', 'address'], ['Telephone', 'tel'], ['Email', 'email'],
+    ['Shop Timings', 'shop_timings'], ['Weekly Off', 'weekly_off'], ['Partners', 'partners'],
+    ['GST No.', 'gst'], ['PAN No.', 'pan'], ['Drug License 20B', 'dl20b'], ['Drug License 21B', 'dl21b'],
+    ['Annual Sales', 'annual_sales'], ['Banker', 'banker']
+  ]);
+  
+  html += section('B. Evaluation', [
+    ['Ideal Environment?', 'env'], ['Blacklisted?', 'blacklisted'], ['Reputation', 'reputation'],
+    ['Supplier Type', 'supplier_type'], ['Salesmen', 'salesmen'], ['Deliverymen', 'deliverymen'],
+    ['Financial Position', 'fin_pos'], ['Expected Business', 'expected_business'], ['Credit Limits', 'credit_limit']
+  ]);
+  
+  html += section('D. Critical Factors', [
+    ['% Growth Expected', 'growth'], ['Existing Parties in Area', 'existing_parties'],
+    ['CA Bill Days', 'ca_bill_days'], ['Issues to Resolve', 'issues_resolved'],
+    ['Measurable Benefits', 'benefits'], ['Districts/Towns Catered', 'towns']
+  ]);
+  
+  html += section('CA Comments', [
+    ['CA/C&F for other Company?', 'ca_other'], ['Reputation (CA View)', 'ca_reputation']
+  ]);
+  
+  if (app.other_companies && app.other_companies.length > 0) {
+    html += `<h4 style="margin-top:15px;margin-bottom:8px;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:4px">C. Other Companies</h4>`;
+    html += `<table class="table" style="font-size:12px;margin-top:8px"><thead><tr><th>Company</th><th>Capacity</th><th>Since</th><th>Turnover</th><th>Credit</th></tr></thead><tbody>`;
+    app.other_companies.forEach(c => {
+      if (c && c.name) {
+        html += `<tr><td>${c.name}</td><td>${c.capacity||'-'}</td><td>${c.since||'-'}</td><td>${c.turnover||'-'}</td><td>${c.credit||'-'}</td></tr>`;
+      }
+    });
+    html += `</tbody></table>`;
+  }
+  
+  html += `</div></div>`;
+  
+  // Documents Section
+  html += `<div class="card" style="margin-top:16px"><div class="card-head"><h3>Uploaded Documents</h3></div><div class="card-pad" style="display:flex;flex-direction:column;gap:10px">`;
+  const docsMap = r.documents || {};
+  const docKeys = Object.keys(docsMap);
+  if (docKeys.length === 0) {
+    html += `<div style="color:#64748b;font-size:13px">No documents uploaded.</div>`;
+  } else {
+    const categoryLabels = {
+      'AadharCard': 'Aadhar Card', 'DrugLicense': 'Drug License', 'GSTCertificate': 'GST Certificate',
+      'PANCard': 'PAN Card', 'PartnershipDeed': 'Partnership Deed', 'PhotographsofProprietor': 'Proprietor Photos',
+      'StockistSignature': 'Stockist Signature'
+    };
+    docKeys.forEach(k => {
+      const label = categoryLabels[k] || k;
+      const data = docsMap[k];
+      const list = Array.isArray(data) ? data : [data];
+      
+      html += `<div><div style="font-weight:600;font-size:13px;margin-bottom:4px">${label}</div><div style="display:flex;flex-wrap:wrap;gap:8px">`;
+      list.forEach((docBase64, idx) => {
+        html += `<button class="btn btn-sm btn-ghost" style="border:1px solid #cbd5e1" onclick="App.viewDoc('${k}', ${idx})">📄 View Document ${list.length>1 ? idx+1 : ''}</button>`;
+      });
+      html += `</div></div>`;
+    });
+  }
+  html += `</div></div>`;
+  
+  return html;
+};
+
+
 App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
   const r = DB.stockists[id];
   if(!r) return;
@@ -3000,7 +3080,7 @@ window.renderManagerDetail = function() {
     <div class="two-col">
       <div>
         ${actionPanel}
-        <div class="card" style="margin-top:16px"><div class="card-head"><h3>Application Data</h3></div><div class="card-pad"><pre style="white-space:pre-wrap;font-size:13px">${JSON.stringify(r.application, null, 2)}</pre></div></div>
+        ${renderStockistData(r)}
       </div>
       <div><div class="card card-pad"><h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>${renderNotifs(DB.email_logs.filter(l=>l.candidate_id===r.id).map(l=>({to:l.recipient, subject:l.subject, ts:new Date(l.sent_at||Date.now()).getTime(), status:l.status})))}</div></div>
     </div>
