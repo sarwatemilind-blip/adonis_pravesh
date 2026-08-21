@@ -893,7 +893,7 @@ function mgrActionPanel(r){
       <div class="banner warn">🕒 Awaiting your approval. Review the rating sheet and application below.</div>
       <div class="field" style="margin-top:10px"><label>Decision notes / comments</label><textarea id="mgrNotes"></textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-primary" onclick="App.midLevelApprove()">Approve &amp; Escalate →</button>
+        <button class="btn btn-primary" onclick="App.midLevelApprove()">${myDesig === "VP" ? "Final Approve Stockist ✅" : "Approve &amp; Escalate →"}</button>
         <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
         <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
       </div></div>`;
@@ -2527,6 +2527,43 @@ document.getElementById('brandLogo').src = LOGO_URI;
 <script>
 // OVERRIDES FOR STOCKIST
 
+App.midLevelApprove = window.midLevelApprove = function() {
+  const notes = (document.getElementById('mgrNotes')||{}).value||'';
+  if(notes) {
+    REC.managerReview = REC.managerReview || {};
+    REC.managerReview.notes = (REC.managerReview.notes ? REC.managerReview.notes + '\n\n' : '') + `${SESSION.managerName} (${SESSION.isAdmin ? 'HR' : 'Approve'}): ${notes}`;
+  }
+  
+  const myMgr = DB.managers[SESSION.managerId];
+  const myDesig = myMgr ? myMgr.designation : 'ASM';
+  
+  let nextStatus = 'pending_vp';
+  
+  if (myDesig === 'VP') {
+    nextStatus = 'approved';
+  } else {
+    const nextId = window.getNextApprover(SESSION.managerId);
+    if (nextId && DB.managers[nextId]) {
+      const d = DB.managers[nextId].designation;
+      if (d === 'RSM') nextStatus = 'pending_rsm';
+      else if (d === 'ZSM') nextStatus = 'pending_zsm';
+    } else {
+      nextStatus = 'approved';
+    }
+  }
+  
+  REC.status = nextStatus;
+  
+  if (nextStatus === 'approved') {
+    addNotif(REC, 'Approvers', `Stockist Application fully approved by ${SESSION.managerName}!`, nextStatus);
+  } else {
+    addNotif(REC, 'Approvers', `Application approved by ${SESSION.managerName} and moving up chain - ${REC.name}`, nextStatus);
+  }
+  
+  saveRec(); render();
+};
+
+
 window.renderStockistData = function(r) {
   let html = `<div class="card" style="margin-top:16px"><div class="card-head"><h3>Application Data</h3></div><div class="card-pad">`;
   
@@ -3055,7 +3092,7 @@ window.renderManagerDetail = function() {
       <div class="banner warn">🕒 Awaiting your approval.</div>
       <div class="field" style="margin-top:10px"><label>Decision notes / comments</label><textarea id="mgrNotes"></textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-primary" onclick="App.midLevelApprove()">Approve &amp; Escalate →</button>
+        <button class="btn btn-primary" onclick="App.midLevelApprove()">${myDesig === "VP" ? "Final Approve Stockist ✅" : "Approve &amp; Escalate →"}</button>
         <button class="btn btn-red" onclick="App.rejectModal()">Reject</button>
       </div></div>`;
   } else if (['pending_rsm','pending_zsm','pending_vp'].includes(r.status)) {
@@ -3205,12 +3242,7 @@ window.renderHRDetail = function() {
       <div>
         ${actionPanel}
         
-        <div class="card" style="margin-top:16px">
-          <div class="card-head"><h3>Application Data</h3></div>
-          <div class="card-pad">
-            <pre style="white-space:pre-wrap;font-size:13px;font-family:monospace;background:#f8fafc;padding:12px;border-radius:4px">${JSON.stringify(r.application, null, 2)}</pre>
-          </div>
-        </div>
+        ${renderStockistData(r)}
       </div>
       <div>
         <div class="card card-pad">
