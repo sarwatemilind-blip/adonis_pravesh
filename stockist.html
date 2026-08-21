@@ -2527,6 +2527,14 @@ document.getElementById('brandLogo').src = LOGO_URI;
 <script>
 // OVERRIDES FOR STOCKIST
 
+App.updateCompany = (idx, field, val) => {
+  if (!REC.application.other_companies) REC.application.other_companies = [];
+  if (!REC.application.other_companies[idx]) REC.application.other_companies[idx] = {};
+  REC.application.other_companies[idx][field] = val;
+  debouncedSave();
+};
+
+
 App.startNewStockist = () => {
   const code = 'S-' + Math.random().toString(36).substr(2,6).toUpperCase();
   REC = blankRec(code);
@@ -2626,6 +2634,38 @@ window.renderCandidateWizard = function() {
       </div>
       <div class="field"><label>Expected Rupee Value business per month</label><input type="text" class="inp" value="${r.application.expected_business||''}" oninput="REC.application.expected_business=this.value; debouncedSave()"></div>
       <div class="field"><label>Credit Limits recommended</label><input type="text" class="inp" value="${r.application.credit_limit||''}" oninput="REC.application.credit_limit=this.value; debouncedSave()"></div>
+      
+      <h2 style="margin-top:30px">C. Distributionship of other Companies</h2>
+      <p style="font-size:12px;color:#64748b;margin-bottom:10px">Specify only 5 major Companies</p>
+      <div style="overflow-x:auto">
+        <table class="table" style="min-width:800px;margin-bottom:20px">
+          <thead>
+            <tr>
+              <th>Name of Company</th>
+              <th>Capacity</th>
+              <th>Since</th>
+              <th>Annual Turnover</th>
+              <th>Receiving Goods From</th>
+              <th>Credit Days</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${[0,1,2,3,4].map(i => {
+              const c = (r.application.other_companies || [])[i] || {};
+              return `
+              <tr>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.name||''}" oninput="App.updateCompany(${i},'name',this.value)"></td>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.capacity||''}" oninput="App.updateCompany(${i},'capacity',this.value)"></td>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.since||''}" oninput="App.updateCompany(${i},'since',this.value)"></td>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.turnover||''}" oninput="App.updateCompany(${i},'turnover',this.value)"></td>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.receiving||''}" oninput="App.updateCompany(${i},'receiving',this.value)"></td>
+                <td style="padding:4px"><input type="text" class="inp" style="padding:6px;font-size:12px" value="${c.credit||''}" oninput="App.updateCompany(${i},'credit',this.value)"></td>
+              </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
     `;
   } else if (VIEW.step === 2) {
     content = `
