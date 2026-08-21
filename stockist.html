@@ -2527,6 +2527,106 @@ document.getElementById('brandLogo').src = LOGO_URI;
 <script>
 // OVERRIDES FOR STOCKIST
 
+App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
+  const r = DB.stockists[id];
+  if(!r) return;
+  toast('Generating Stockist PDF...','⏳');
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Header with Logo
+  if(typeof LOGO_URI !== 'undefined' && LOGO_URI) {
+    try { doc.addImage(LOGO_URI, 'PNG', 14, 10, 40, 15); } catch(e) {}
+  }
+  doc.setFontSize(16);
+  doc.text('STOCKIST APPOINTMENT FORM', 60, 20);
+  doc.setFontSize(10);
+  doc.text(`Code: ${r.id} | Status: ${STAGE_LABELS[r.status]}`, 14, 30);
+  
+  let y = 40;
+  
+  // Section A
+  doc.setFontSize(12);
+  doc.text('A. Basic Knowledge About The Party', 14, y); y+=6;
+  doc.autoTable({
+    startY: y,
+    theme: 'grid',
+    head: [['Field', 'Details']],
+    body: [
+      ['Firm Name', r.application.firm_name || ''],
+      ['Address', r.application.address || ''],
+      ['Telephone', r.application.tel || ''],
+      ['Email', r.application.email || ''],
+      ['Shop Timings', r.application.shop_timings || ''],
+      ['Weekly Off', r.application.weekly_off || ''],
+      ['Partners', r.application.partners || ''],
+      ['GST No.', r.application.gst || ''],
+      ['PAN No.', r.application.pan || ''],
+      ['Drug License (20B)', r.application.dl20b || ''],
+      ['Drug License (21B)', r.application.dl21b || ''],
+      ['Annual Sales', r.application.annual_sales || ''],
+      ['Banker', r.application.banker || '']
+    ]
+  });
+  y = doc.lastAutoTable.finalY + 10;
+  
+  // B & D
+  if (y > 250) { doc.addPage(); y = 20; }
+  doc.text('B & D. Evaluation & Critical Factors', 14, y); y+=6;
+  doc.autoTable({
+    startY: y,
+    theme: 'grid',
+    body: [
+      ['Ideal Env?', r.application.env || ''],
+      ['Blacklisted?', r.application.blacklisted || ''],
+      ['Reputation', r.application.reputation || ''],
+      ['Supplier Type', r.application.supplier_type || ''],
+      ['Salesmen / Deliverymen', `${r.application.salesmen||0} / ${r.application.deliverymen||0}`],
+      ['Financial Position', r.application.fin_pos || ''],
+      ['Expected Business', r.application.expected_business || ''],
+      ['Credit Limits', r.application.credit_limit || ''],
+      ['% Growth Expected', r.application.growth || ''],
+      ['CA Bill Days', r.application.ca_bill_days || '']
+    ]
+  });
+  y = doc.lastAutoTable.finalY + 10;
+  
+  // C
+  if (y > 250) { doc.addPage(); y = 20; }
+  doc.text('C. Other Companies', 14, y); y+=6;
+  const cBody = (r.application.other_companies||[]).filter(c=>c.name).map(c=>[c.name||'', c.capacity||'', c.since||'', c.turnover||'', c.credit||'']);
+  if(cBody.length > 0) {
+    doc.autoTable({ startY: y, theme: 'grid', head: [['Company', 'Capacity', 'Since', 'Turnover', 'Credit Days']], body: cBody });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+  
+  // Signatures
+  if (y > 200) { doc.addPage(); y = 20; }
+  doc.text('Record of Approvals', 14, y); y+=8;
+  
+  const chain = window.getApprovalChain(r.managerId);
+  const mgrs = chain.map(id => DB.managers[id]).filter(Boolean);
+  
+  let sigX = 14;
+  mgrs.forEach(m => {
+    if(sigX > 160) { sigX = 14; y+= 35; }
+    if (y > 270) { doc.addPage(); y = 20; sigX = 14; }
+    doc.setFontSize(9);
+    doc.text(`${m.name} (${m.designation})`, sigX, y);
+    if(m.signature) {
+      try { doc.addImage(m.signature, 'JPEG', sigX, y+2, 30, 15); } catch(e){}
+    } else {
+      doc.text('(No signature)', sigX, y+10);
+    }
+    sigX += 45;
+  });
+  
+  doc.save(`${r.application.firm_name||'Stockist'}_Application.pdf`);
+  toast('PDF Downloaded!','✅');
+};
+
+
 window.persistCandidate = async function(record) {
   if (!isOnline) {
     offlineQueue.push({ table: 'stockists', data: record });
