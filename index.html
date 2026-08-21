@@ -895,8 +895,9 @@ function mgrActionPanel(r){
         <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
         <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
       </div></div>`;
-  if(r.status==='interview_rated')
-    return `<div class="banner info">📨 Rating submitted — file is with HR / Admin for final decision.</div>`;
+  }
+  if(['pending_rsm','pending_zsm','pending_vp','interview_rated'].includes(r.status))
+    return `<div class="banner info">📨 Rating submitted — file is with higher management / HR for approval.</div>`;
   if(r.status==='approved')
     return `<div class="banner success">🎉 Approved by HR.${r.hrDecision&&r.hrDecision.comments?' Note: '+esc(r.hrDecision.comments):''}</div>`;
   if(r.status==='rejected')
