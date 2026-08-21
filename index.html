@@ -452,7 +452,8 @@ async function loadFromStorage() {
           designation: m.designation || 'ASM',
           reports_to: m.reports_to || null,
           hq: m.hq || '',
-          state: m.state || ''
+          state: m.state || '',
+          signature: m.signature || null
         };
       });
     }
@@ -697,6 +698,8 @@ function renderManagerDashboard(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="App.showNewCandModal()">+ Invite candidate</button>
+        <button class="btn" style="background:#059669;color:white;border-color:#059669" onclick="window.location.href='stockist.html'">📦 Stockist Appointments</button>
+        <button class="btn" onclick="App.showProfileModal()">My Profile</button>
         <button class="btn" onclick="App.managerLogout()">Sign out</button>
       </div>
     </div>
@@ -1181,6 +1184,60 @@ function renderHRDashboard(){
       </div>
     </div>
     <div id="modalRoot"></div>`;
+}
+
+/* ─── MANAGER PROFILE ───────────────────────────────────── */
+function showProfileModal(){
+  const m = DB.managers[SESSION.managerId];
+  if(!m) return;
+  document.getElementById('modalRoot').innerHTML=`
+    <div class="modal"><div class="modal-content">
+      <h2>My Profile</h2>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:15px">Upload your signature photo here. It will be stamped automatically on PDFs when you approve Stockists.</p>
+      
+      <div class="field">
+        <label>Current Signature</label>
+        <div style="border:1px dashed #cbd5e1;padding:10px;text-align:center;background:#f8fafc;border-radius:4px;margin-bottom:10px">
+          ${m.signature ? `<img src="${m.signature}" style="max-height:80px">` : `<span class="micro">No signature uploaded yet.</span>`}
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Upload New Signature (Image)</label>
+        <input type="file" id="mgrSigFile" accept="image/*" class="inp">
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button class="btn" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveProfileSignature()">Save Signature</button>
+      </div>
+    </div></div>`;
+}
+
+async function saveProfileSignature(){
+  const fileInput = document.getElementById('mgrSigFile');
+  if(!fileInput.files || !fileInput.files[0]) {
+    App.closeModal();
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64 = e.target.result;
+    
+    // Update Supabase
+    const { error } = await supa.from('managers').update({ signature: base64 }).eq('id', SESSION.managerId);
+    
+    if (error) {
+      toast('Failed to save signature', '❌');
+    } else {
+      DB.managers[SESSION.managerId].signature = base64;
+      toast('Signature saved successfully!', '✅');
+      App.closeModal();
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 /* add manager modal */
@@ -2412,7 +2469,7 @@ window.App={
   hrLogin, hrLogout, openHR, backToHRDash, hrDecide,
   showOfferLetterModal, previewOffer, sendOffer, copyOfferText, copyLink, showEmailBody,
   
-  showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw,
+  showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw, showProfileModal, saveProfileSignature,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
   candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc, deleteCandidate, downloadCandidatePDF,
 };
