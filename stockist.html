@@ -2526,8 +2526,6 @@ document.getElementById('brandLogo').src = LOGO_URI;
 
 <script>
 // OVERRIDES FOR STOCKIST
-STAGE_ORDER = ['draft','pending_rsm','pending_zsm','pending_vp','approved','rejected'];
-STAGE_LABELS = {draft:'Draft',pending_rsm:'Pending RSM',pending_zsm:'Pending ZSM',pending_vp:'Pending VP',approved:'Approved',rejected:'Rejected'};
 
 App.startNewStockist = () => {
   const code = 'S-' + Math.random().toString(36).substr(2,6).toUpperCase();
