@@ -3008,6 +3008,162 @@ window.renderManagerDetail = function() {
   `;
 };
 
+
+window.renderHRDashboard = function() {
+  const pending = DB.index.filter(c => c.status === 'pending_vp');
+  const pendingManager = DB.index.filter(c => ['draft', 'pending_rsm', 'pending_zsm'].includes(c.status));
+  const mgrList = Object.values(DB.managers);
+  document.getElementById('app').innerHTML = `
+    <div class="page-head">
+      <div><span class="eyebrow">Admin / VP · Head Office</span><h1>Stockist Appointments Tracking</h1></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="App.showAddMgrModal()">+ Add manager account</button>
+        <button class="btn" onclick="App.showBulkMgrModal()">📊 Bulk upload Excel</button>
+        <button class="btn" onclick="App.showChangePwModal()">Change admin password</button>
+        <button class="btn" onclick="App.hrLogout()">Sign out</button>
+      </div>
+    </div>
+    <!-- stats -->
+    <div class="grid-4" style="margin-bottom:18px">
+      ${statCard('Final Approval Pending', pending.length)}
+      ${statCard('Manager Chain Pending', pendingManager.length)}
+      ${statCard('Approved', DB.index.filter(c => c.status === 'approved').length)}
+      ${statCard('Total tracked', DB.index.length)}
+    </div>
+    
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><h3>Awaiting Final Decision</h3></div>
+      <table class="table">
+        <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
+        <tbody>
+          ${pending.length === 0 ? '<tr><td colspan="6" class="empty">No stockists awaiting final approval.</td></tr>' : ''}
+          ${pending.map(c => {
+            const m = DB.managers[c.managerId];
+            return `<tr>
+              <td><strong>${esc(c.name)}</strong></td>
+              <td><span class="mgr-chip">${m ? esc(m.name) : 'Unknown'}</span></td>
+              <td><span class="codepill">${c.id}</span></td>
+              <td><strong>${STAGE_LABELS[c.status]}</strong></td>
+              <td style="color:#64748b">${new Date(c.updatedAt).toLocaleDateString('en-GB')}</td>
+              <td style="text-align:right">
+                <button class="btn btn-sm" onclick="VIEW.screen='detail';VIEW.candidateId='${c.id}';render()">Open →</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center">
+        <h3>All Stockist Applications</h3>
+        <span style="font-size:13px;color:#64748b">${DB.index.length} total</span>
+      </div>
+      <table class="table">
+        <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
+        <tbody>
+          ${DB.index.map(c => {
+            const m = DB.managers[c.managerId];
+            return `<tr>
+              <td><strong>${esc(c.name)}</strong></td>
+              <td><span class="mgr-chip">${m ? esc(m.name) : 'Unknown'}</span></td>
+              <td><span class="codepill">${c.id}</span></td>
+              <td><strong>${STAGE_LABELS[c.status]}</strong></td>
+              <td style="color:#64748b">${new Date(c.updatedAt).toLocaleDateString('en-GB')}</td>
+              <td style="text-align:right;white-space:nowrap">
+                <button class="btn btn-sm" onclick="VIEW.screen='detail';VIEW.candidateId='${c.id}';render()">Open →</button>
+                <button class="btn btn-sm btn-red" onclick="App.deleteCandidate('${c.id}')" title="Delete">🗑</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div id="modalRoot"></div>
+  `;
+};
+
+window.renderHRDetail = function() {
+  const r = DB.stockists[VIEW.candidateId];
+  if(!r) { VIEW.screen='dashboard'; render(); return; }
+  
+  let actionPanel = '';
+  if (r.status === 'pending_vp') {
+    actionPanel = `
+      <div class="card card-pad" style="border-color:#3b82f6;background:#eff6ff">
+        <h3 style="margin-bottom:10px;color:#1e40af">Final VP Approval Required</h3>
+        <p style="font-size:13px;color:#1e3a8a;margin-bottom:12px">This stockist application has cleared the manager chain and requires your final approval.</p>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" onclick="App.hrApproveStockist()">Approve Stockist</button>
+          <button class="btn btn-red" onclick="App.hrRejectStockist()">Reject</button>
+        </div>
+      </div>
+    `;
+  } else if (r.status === 'approved') {
+    actionPanel = `<div class="banner success">🎉 Stockist Approved</div>`;
+  } else if (r.status === 'rejected') {
+    actionPanel = `<div class="banner danger">❌ Stockist Rejected</div>`;
+  } else {
+    actionPanel = `<div class="banner info">📨 Currently at ${STAGE_LABELS[r.status]} stage in the manager chain.</div>`;
+  }
+
+  document.getElementById('app').innerHTML = `
+    <div class="page-head">
+      <div>
+        <span class="eyebrow">Admin / VP Panel</span>
+        <h1>${esc(r.name)}</h1>
+        <div class="sub">Stockist Appointment · Code <span class="codepill" style="font-size:11px">${r.id}</span></div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <button class="btn btn-primary" style="margin-right:8px" onclick="App.downloadCandidatePDF('${r.id}')">📄 Download PDF</button>
+        <button class="btn btn-ghost" onclick="App.backToHRDash()">All Stockists</button>
+      </div>
+    </div>
+    ${stepperHTML(r.status)}
+    
+    <div class="two-col">
+      <div>
+        ${actionPanel}
+        
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Application Data</h3></div>
+          <div class="card-pad">
+            <pre style="white-space:pre-wrap;font-size:13px;font-family:monospace;background:#f8fafc;padding:12px;border-radius:4px">${JSON.stringify(r.application, null, 2)}</pre>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card card-pad">
+          <h3 style="font-size:14px;margin-bottom:10px">Notification log</h3>
+          ${renderNotifs(DB.email_logs.filter(l=>l.candidate_id===r.id).map(l=>({to:l.recipient, subject:l.subject, ts:new Date(l.sent_at||Date.now()).getTime(), status:l.status})))}
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+App.hrApproveStockist = () => {
+  const r = DB.stockists[VIEW.candidateId];
+  if(!r) return;
+  if(!confirm(`Are you sure you want to approve ${r.name}?`)) return;
+  r.status = 'approved';
+  REC = r;
+  addNotif(r, 'Approvers', `Stockist Approved by VP — ${r.name}`, 'approved');
+  saveRec();
+  render();
+};
+
+App.hrRejectStockist = () => {
+  const r = DB.stockists[VIEW.candidateId];
+  if(!r) return;
+  if(!confirm(`Are you sure you want to reject ${r.name}?`)) return;
+  r.status = 'rejected';
+  REC = r;
+  addNotif(r, 'Approvers', `Stockist Rejected by VP — ${r.name}`, 'rejected');
+  saveRec();
+  render();
+};
+
 // Override render function completely to avoid loading HR panels if not needed
 const origRender = window.render;
 window.render = function() {
