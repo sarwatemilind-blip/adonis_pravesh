@@ -326,9 +326,9 @@ const HR_VERIFY = [
   "Two passport size recent photographs (with tie)",
 ];
 
-const STAGE_ORDER  = ['invited','in_progress','submitted','under_review','interview_rated','approved','offer_sent'];
+const STAGE_ORDER  = ['invited','in_progress','submitted','under_review','interview_rated','pending_rsm','pending_zsm','pending_vp','approved','offer_sent'];
 const STAGE_LABELS = {invited:'Invited',in_progress:'Form Filling',submitted:'Form Filled',under_review:'Manager Approval Pending',
-  interview_rated:'Interview Rated',approved:'Approved',rejected:'Not Selected',offer_sent:'Offer Sent'};
+  interview_rated:'Interview Rated',pending_rsm:'Pending RSM Approval',pending_zsm:'Pending ZSM Approval',pending_vp:'Pending VP/Admin Approval',approved:'Approved',rejected:'Not Selected',offer_sent:'Offer Sent'};
 
 /* ─── in-memory DB (source of truth within this session) ─ */
 /* ─── Supabase Configuration ────────────────────────── */
@@ -447,11 +447,30 @@ async function loadFromStorage() {
           username: m.username,
           password: m.password,
           email: m.email,
-          createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now()
+          createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+          designation: m.designation || 'ASM',
+          reports_to: m.reports_to || null,
+          hq: m.hq || '',
+          state: m.state || ''
         };
       });
     }
     console.log("Loaded managers:", Object.keys(DB.managers).length);
+    
+    // Add hierarchy helpers
+    window.getApprovalChain = function(managerId) {
+      const chain = [];
+      let curr = managerId;
+      while (curr && DB.managers[curr]) {
+        chain.push(curr);
+        curr = DB.managers[curr].reports_to;
+      }
+      return chain;
+    };
+    window.getNextApprover = function(managerId) {
+      if(!managerId || !DB.managers[managerId]) return null;
+      return DB.managers[managerId].reports_to;
+    };
     
     if (cands) {
       cands.forEach(c => {
@@ -652,11 +671,26 @@ function managerLogout(){ SESSION.managerId=null; SESSION.managerName=null; save
 
 /* ─── MANAGER DASHBOARD ────────────────────────────────── */
 function renderManagerDashboard(){
+  const myMgr = DB.managers[SESSION.managerId];
+  const myDesig = myMgr ? myMgr.designation : 'ASM';
   const mine=DB.index.filter(c=>c.managerId===SESSION.managerId);
+  
+  const awaiting = DB.index.filter(c => {
+    if (!c.managerId) return false;
+    const chain = getApprovalChain(c.managerId);
+    if (!chain.includes(SESSION.managerId)) return false;
+    
+    if (myDesig === 'RSM' && c.status === 'pending_rsm') return true;
+    if (myDesig === 'ZSM' && c.status === 'pending_zsm') return true;
+    if (myDesig === 'VP'  && c.status === 'pending_vp') return true;
+    
+    return false;
+  });
+
   document.getElementById('app').innerHTML=`
     <div class="page-head">
       <div>
-        <span class="eyebrow">Hiring Manager · ${esc(SESSION.managerName)}</span>
+        <span class="eyebrow">Hiring Manager · ${esc(SESSION.managerName)} (${esc(myDesig)})</span>
         <h1>Candidate pipeline</h1>
         <div class="sub">Your active recruitment workflow.</div>
       </div>
@@ -665,13 +699,22 @@ function renderManagerDashboard(){
         <button class="btn" onclick="App.managerLogout()">Sign out</button>
       </div>
     </div>
-    <div class="grid-3" style="margin-bottom:18px">
-      ${statCard('Active',mine.filter(c=>c.status!=='approved'&&c.status!=='rejected').length)}
-      ${statCard('Approval Pending',mine.filter(c=>c.status==='submitted').length)}
-      ${statCard('With HR',mine.filter(c=>c.status==='interview_rated').length)}
+    <div class="grid-4" style="margin-bottom:18px">
+      ${statCard('Active',mine.filter(c=>c.status!=='approved'&&c.status!=='rejected'&&c.status!=='offer_sent').length)}
+      ${statCard('My Approvals',mine.filter(c=>c.status==='submitted').length)}
+      ${statCard('Team Pending',awaiting.length)}
+      ${statCard('Total Recruited',mine.length)}
     </div>
+    
+    ${awaiting.length ? `<div class="card" style="margin-bottom:18px">
+      <div class="card-head"><h3>Awaiting Your Approval</h3><span class="micro">${awaiting.length} pending</span></div>
+      <div class="card-pad" style="padding-top:8px">
+        ${candTable(awaiting, 'manager')}
+      </div>
+    </div>` : ''}
+
     <div class="card">
-      <div class="card-head"><h3>Your candidates</h3><span class="micro">${mine.length} total</span></div>
+      <div class="card-head"><h3>Your Recruited Candidates</h3><span class="micro">${mine.length} total</span></div>
       <div class="card-pad" style="padding-top:8px">
         ${mine.length ? candTable(mine,'manager') : emptyState('📋','No candidates yet','Invite your first candidate to get started.')}
       </div>
@@ -811,21 +854,43 @@ function renderManagerDetail(){
 
 function mgrActionPanel(r){
   if(r.status==='invited' || r.status==='in_progress') {
-    const bannerText = r.status==='in_progress' ? '⏳ Candidate is filling the form.' : '⏳ Waiting for candidate.';
+    const bannerText = r.status==='in_progress' ? '📝 Candidate is filling the form.' : '⏳ Waiting for candidate.';
     const link = window.location.origin + window.location.pathname + '#candidate/' + r.id;
     return `<div class="card card-pad"><div class="banner info">${bannerText} Share code: <span class="codepill">${r.id}</span></div>
       <div style="margin-top:10px;display:flex;gap:10px">
         <button class="btn btn-sm" onclick="App.resendInvite()">Resend invite notification</button>
-        <button class="btn btn-sm btn-primary" onclick="App.copyLink('${r.id}')">📋 Copy direct link</button>
+        <button class="btn btn-sm btn-primary" onclick="App.copyLink('${r.id}')">🔗 Copy direct link</button>
         <a class="btn btn-sm" style="background:#25D366;color:white;border-color:#25D366" href="https://wa.me/?text=${encodeURIComponent(`Hi ${r.name}, please complete your onboarding: ${link}`)}" target="_blank">📱 Send via WhatsApp</a>
       </div></div>`;
   }
-  if(r.status==='submitted'||r.status==='under_review')
+
+  const myMgr = DB.managers[SESSION.managerId];
+  const myDesig = myMgr ? myMgr.designation : 'ASM';
+  const isDirectManager = r.managerId === SESSION.managerId;
+  
+  if(isDirectManager) {
+    if(r.status==='submitted'||r.status==='under_review') {
+      return `<div class="card card-pad">
+        <div class="banner success">✅ Application submitted. Review and proceed to interview rating.</div>
+        <div class="field" style="margin-top:10px"><label>Internal review notes</label><textarea id="mgrNotes">${esc((r.managerReview && r.managerReview.notes) || '')}</textarea></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-primary" onclick="App.goToRating()">${r.status==='under_review'?'Continue':'Start'} interview rating →</button>
+          <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
+          <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
+        </div></div>`;
+    }
+  }
+  
+  const isAwaitingMe = (myDesig === 'RSM' && r.status === 'pending_rsm') || 
+                       (myDesig === 'ZSM' && r.status === 'pending_zsm') || 
+                       (myDesig === 'VP'  && r.status === 'pending_vp');
+  
+  if (isAwaitingMe && window.getApprovalChain(r.managerId).includes(SESSION.managerId)) {
     return `<div class="card card-pad">
-      <div class="banner success">✅ Application submitted. Review and proceed to interview rating.</div>
-      <div class="field" style="margin-top:10px"><label>Internal review notes</label><textarea id="mgrNotes">${esc((r.managerReview && r.managerReview.notes) || '')}</textarea></div>
+      <div class="banner warn">🕒 Awaiting your approval. Review the rating sheet and application below.</div>
+      <div class="field" style="margin-top:10px"><label>Decision notes / comments</label><textarea id="mgrNotes"></textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-primary" onclick="App.goToRating()">${r.status==='under_review'?'Continue':'Start'} interview rating →</button>
+        <button class="btn btn-primary" onclick="App.midLevelApprove()">Approve &amp; Escalate →</button>
         <button class="btn" style="color:#d97706;border-color:#f59e0b" onclick="App.showCorrectionModal()">⚠️ Ask for correction</button>
         <button class="btn btn-red" onclick="App.rejectModal()">Not Selected</button>
       </div></div>`;
@@ -998,10 +1063,41 @@ function setDocVerify(i,val){
 }
 function submitRating(){
   if(!REC.ratingSheet.managerDeclared){ toast('Please confirm the document verification declaration first.','⚠️'); return; }
-  REC.status='interview_rated';
-  addNotif(REC,'HR / Admin',`Interview rating ready for approval — ${REC.name} (${REC.position})`,'interview_rated');
+  
+  let nextStatus = 'pending_vp';
+  const nextId = getNextApprover(SESSION.managerId);
+  if (nextId && DB.managers[nextId]) {
+    const d = DB.managers[nextId].designation;
+    if (d === 'RSM') nextStatus = 'pending_rsm';
+    else if (d === 'ZSM') nextStatus = 'pending_zsm';
+  }
+  
+  REC.status = nextStatus;
+  addNotif(REC, 'Approvers', `Interview rating ready for approval — ${REC.name} (${REC.position})`, nextStatus);
   saveRec(); VIEW.screen='detail'; render();
 }
+
+function midLevelApprove() {
+  const notes = (document.getElementById('mgrNotes')||{}).value||'';
+  if(notes) {
+    REC.managerReview = REC.managerReview || {};
+    REC.managerReview.notes = (REC.managerReview.notes ? REC.managerReview.notes + '\n\n' : '') + `${SESSION.managerName} (Approve): ${notes}`;
+  }
+  
+  let nextStatus = 'pending_vp';
+  const nextId = getNextApprover(SESSION.managerId);
+  if (nextId && DB.managers[nextId]) {
+    const d = DB.managers[nextId].designation;
+    if (d === 'RSM') nextStatus = 'pending_rsm';
+    else if (d === 'ZSM') nextStatus = 'pending_zsm';
+  }
+  
+  REC.status = nextStatus;
+  addNotif(REC, 'Approvers', `Application approved by ${SESSION.managerName} and moving up chain — ${REC.name}`, nextStatus);
+  saveRec(); render();
+}
+
+window.App.midLevelApprove = midLevelApprove;
 
 /* ─── HR / ADMIN LOGIN ─────────────────────────────────── */
 function renderHRLogin(){
@@ -1026,8 +1122,8 @@ function hrLogout(){ SESSION.isAdmin=false; SESSION.managerName=null; saveSessio
 
 /* ─── HR DASHBOARD ─────────────────────────────────────── */
 function renderHRDashboard(){
-  const pending=DB.index.filter(c=>c.status==='interview_rated');
-  const pendingManager=DB.index.filter(c=>c.status==='submitted'||c.status==='under_review');
+  const pending=DB.index.filter(c=>c.status==='pending_vp');
+  const pendingManager=DB.index.filter(c=>['submitted','under_review','interview_rated','pending_rsm','pending_zsm'].includes(c.status));
   const mgrList=Object.values(DB.managers);
   document.getElementById('app').innerHTML=`
     <div class="page-head">
@@ -1042,8 +1138,8 @@ function renderHRDashboard(){
     </div>
     <!-- stats -->
     <div class="grid-4" style="margin-bottom:18px">
-      ${statCard('HR Approval Pending',pending.length)}
-      ${statCard('Manager Approval Pending',pendingManager.length)}
+      ${statCard('Final Approval Pending',pending.length)}
+      ${statCard('Manager Chain Pending',pendingManager.length)}
       ${statCard('Approved',DB.index.filter(c=>c.status==='approved').length)}
       ${statCard('Total tracked',DB.index.length)}
     </div>
@@ -1051,13 +1147,15 @@ function renderHRDashboard(){
     <div class="card" style="margin-bottom:18px">
       <div class="card-head"><h3>Manager accounts</h3><span class="micro">${mgrList.length} accounts</span></div>
       <div class="card-pad" style="padding-top:8px">
-        ${mgrList.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Manager ID (username)</th><th>Created</th><th>Candidates</th><th></th></tr></thead><tbody>
+        ${mgrList.length ? `<table class="tbl"><thead><tr><th>Name</th><th>Designation</th><th>Reports To</th><th>Manager ID</th><th>Candidates</th><th></th></tr></thead><tbody>
           ${mgrList.map(m=>{
             const cnt=DB.index.filter(c=>c.managerId===m.id).length;
+            const reportsToName = m.reports_to && DB.managers[m.reports_to] ? DB.managers[m.reports_to].name : '—';
             return `<tr>
               <td><div style="display:flex;align-items:center;gap:8px"><div class="mgr-avatar">${avatar(m.name)}</div><span style="font-weight:600">${esc(m.name)}</span></div></td>
+              <td>${esc(m.designation||'ASM')}</td>
+              <td class="micro">${esc(reportsToName)}</td>
               <td><span class="codepill" style="font-size:12px;padding:3px 9px">${esc(m.username)}</span></td>
-              <td class="micro">${fmtDate(m.createdAt)}</td>
               <td>${cnt}</td>
               <td><button class="btn btn-sm btn-red" onclick="App.deleteMgr('${m.id}')">Remove</button></td>
             </tr>`;
@@ -1067,12 +1165,12 @@ function renderHRDashboard(){
     </div>
     <!-- pending approvals -->
     ${pending.length ? `<div class="card" style="margin-bottom:18px">
-      <div class="card-head"><h3>Awaiting HR decision</h3></div>
+      <div class="card-head"><h3>Awaiting Final Decision</h3></div>
       <div class="card-pad" style="padding-top:8px">${candTable(pending,'hr')}</div>
     </div>` : ''}
     <!-- pending manager approvals -->
     ${pendingManager.length ? `<div class="card" style="margin-bottom:18px">
-      <div class="card-head"><h3>Awaiting Manager Review</h3><span class="micro">${pendingManager.length} pending</span></div>
+      <div class="card-head"><h3>Awaiting Manager Chain</h3><span class="micro">${pendingManager.length} pending</span></div>
       <div class="card-pad" style="padding-top:8px">${candTable(pendingManager,'hr')}</div>
     </div>` : ''}
     <!-- all candidates -->
@@ -1220,8 +1318,8 @@ function hrDecisionPanel(r){
       <div class="banner success">📄 Offer letter sent on ${r.offerLetter?fmtDate(r.offerLetter.sentAt):'—'}.</div>
       <button class="btn btn-sm" style="margin-top:8px" onclick="App.showOfferLetterModal()">View / Resend offer letter</button>
     </div>`;
-  if(r.status!=='interview_rated')
-    return `<div class="banner info">Current stage: <strong>${STAGE_LABELS[r.status]||r.status}</strong>. No HR action needed yet.</div>`;
+  if(r.status!=='pending_vp')
+    return `<div class="banner info">Current stage: <strong>${STAGE_LABELS[r.status]||r.status}</strong>. No final action needed yet.</div>`;
   return `<div class="card card-pad">
     <div class="banner warn">🕒 Pending your decision. Review the rating sheet, application and documents below.</div>
     <div class="field"><label>Decision notes / comments</label><textarea id="hrComments"></textarea></div>
