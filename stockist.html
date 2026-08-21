@@ -1300,16 +1300,23 @@ async function deleteMgr(id){
   const mgr=DB.managers[id];
   if(!mgr) return;
   if(!confirm(`Remove manager account for "${mgr.name}"? Their candidates will remain in the system.`)) return;
-  toast('Removing manager...','⏳');
+  toast('Removing manager...', '⏳');
+  
+  // 1. Reassign or nullify dependencies to avoid Foreign Key constraint errors
+  await supa.from('candidates').update({ managerId: null }).eq('managerId', id);
+  await supa.from('stockists').update({ managerId: null }).eq('managerId', id);
+  await supa.from('managers').update({ reportsTo: null }).eq('reportsTo', id);
+  
+  // 2. Delete the manager
   const { error } = await supa.from('managers').delete().eq('id', id);
   if (error) {
     console.error('Failed to delete manager', error);
-    toast('Failed to delete manager','❌');
+    toast('Failed to delete manager: ' + (error.message || ''), '❌');
     return;
   }
   delete DB.managers[id];
   render();
-  toast('Manager removed','✅');
+  toast('Manager removed', '✅');
 }
 
 function showChangePwModal(){
