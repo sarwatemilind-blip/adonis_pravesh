@@ -1,14 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const SUPABASE_URL = "https://ixvzczhhopwucuiwzwpv.supabase.co";
-// Using the service role key or anon key? I only have the anon key from index.html
 const SUPABASE_ANON_KEY = "sb_publishable_Qkp8hQXFR6WZVFgd78_SnA_R5hsoez2";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function genId() {
-  return 'M-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+  return crypto.randomUUID();
 }
 
 async function run() {
