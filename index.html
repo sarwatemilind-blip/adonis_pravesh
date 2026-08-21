@@ -1194,12 +1194,13 @@ function showProfileModal(){
   document.getElementById('modalRoot').innerHTML=`
     <div class="modal"><div class="modal-content">
       <h2>My Profile</h2>
-      <p style="font-size:13px;color:var(--gray-500);margin-bottom:15px">Upload your signature photo here. It will be stamped automatically on PDFs when you approve Stockists.</p>
+      <p style="font-size:13px;color:#64748b;margin-bottom:15px">Upload your signature photo here. It will be stamped automatically on PDFs when you approve Stockists.</p>
       
       <div class="field">
         <label>Current Signature</label>
         <div style="border:1px dashed #cbd5e1;padding:10px;text-align:center;background:#f8fafc;border-radius:4px;margin-bottom:10px">
-          ${m.signature ? `<img src="${m.signature}" style="max-height:80px">` : `<span class="micro">No signature uploaded yet.</span>`}
+          ${m.signature ? `<img src="${m.signature}" style="max-height:80px">
+          <div style="margin-top:10px"><button class="btn btn-sm btn-red" onclick="App.deleteProfileSignature()">🗑 Delete Signature</button></div>` : `<span class="micro">No signature uploaded yet.</span>`}
         </div>
       </div>
 
@@ -1214,6 +1215,22 @@ function showProfileModal(){
       </div>
     </div></div>`;
 }
+
+window.deleteProfileSignature = async function() {
+  if(!confirm("Are you sure you want to delete your signature?")) return;
+  const m = DB.managers[SESSION.managerId];
+  if(!m) return;
+  toast('Deleting...', '⏳');
+  const { error } = await supa.from('managers').update({ signature: null }).eq('id', SESSION.managerId);
+  if (error) {
+    toast('Failed to delete signature', '❌');
+    return;
+  }
+  m.signature = null;
+  toast('Signature deleted!', '🗑');
+  showProfileModal();
+}
+
 
 async function saveProfileSignature(){
   const fileInput = document.getElementById('mgrSigFile');
@@ -2491,7 +2508,7 @@ window.App={
   hrLogin, hrLogout, openHR, backToHRDash, hrDecide,
   showOfferLetterModal, previewOffer, sendOffer, copyOfferText, copyLink, showEmailBody,
   
-  showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw, showProfileModal, saveProfileSignature,
+  showAddMgrModal, createMgr, deleteMgr, showChangePwModal, changePw, showProfileModal, saveProfileSignature, deleteProfileSignature,
   showBulkMgrModal, downloadMgrTemplate, parseMgrExcel, confirmBulkImport,
   candidateAccess, exitCandSession, wizNext, wizPrev, addRow, removeRow, attachDoc, removeDoc, submitApp, downloadDoc, deleteCandidate, downloadCandidatePDF,
 };
