@@ -1303,9 +1303,9 @@ async function deleteMgr(id){
   toast('Removing manager...', '⏳');
   
   // 1. Reassign or nullify dependencies to avoid Foreign Key constraint errors
-  await supa.from('candidates').update({ managerId: null }).eq('managerId', id);
-  await supa.from('stockists').update({ managerId: null }).eq('managerId', id);
-  await supa.from('managers').update({ reportsTo: null }).eq('reportsTo', id);
+  await supa.from('candidates').update({ manager_id: null }).eq('manager_id', id);
+  await supa.from('stockists').update({ manager_id: null }).eq('manager_id', id);
+  await supa.from('managers').update({ reports_to: null }).eq('reports_to', id);
   
   // 2. Delete the manager
   const { error } = await supa.from('managers').delete().eq('id', id);
