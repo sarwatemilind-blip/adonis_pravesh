@@ -478,9 +478,10 @@ async function loadFromStorage() {
     
     if (cands) {
       cands.forEach(c => {
+        const firmName = c.firm_name || (c.application && c.application.firm_name) || c.name || 'New Stockist';
         DB.stockists[c.id] = {
           id: c.id,
-          name: c.name,
+          name: firmName,
           email: c.email,
           phone: c.phone,
           position: c.position,
@@ -497,10 +498,13 @@ async function loadFromStorage() {
           updatedAt: new Date(c.updated_at).getTime()
         };
       });
-      DB.index = cands.map(c => ({
-        id: c.id, name: c.name, email: c.email, position: c.position, 
-        status: c.status, managerId: c.manager_id, updatedAt: new Date(c.updated_at).getTime()
-      }));
+      DB.index = cands.map(c => {
+        const firmName = c.firm_name || (c.application && c.application.firm_name) || c.name || 'New Stockist';
+        return {
+          id: c.id, name: firmName, email: c.email, position: c.position, 
+          status: c.status, managerId: c.manager_id, updatedAt: new Date(c.updated_at).getTime()
+        };
+      });
     }
     
     DB.email_logs = elogs || [];
@@ -3186,7 +3190,8 @@ window.renderManagerDetail = function() {
         <h1>${esc(r.name)}</h1>
         <div class="sub">Stockist Appointment · Code <span class="codepill" style="font-size:11px;padding:3px 8px">${r.id}</span></div>
       </div>
-      <div>
+      <div style="display:flex;align-items:center">
+        <button class="btn btn-primary" style="margin-right:8px" onclick="App.downloadCandidatePDF('${r.id}')">📄 Download PDF</button>
         <button class="btn btn-ghost" onclick="App.backToMgrDash()">All Applications</button>
       </div>
     </div>
@@ -3228,7 +3233,7 @@ window.renderHRDashboard = function() {
     
     <div class="card" style="margin-bottom:20px">
       <div class="card-head"><h3>Awaiting Final Decision</h3></div>
-      <table class="table">
+      <table class="tbl">
         <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
         <tbody>
           ${pending.length === 0 ? '<tr><td colspan="6" class="empty">No stockists awaiting final approval.</td></tr>' : ''}
@@ -3241,7 +3246,7 @@ window.renderHRDashboard = function() {
               <td><strong>${STAGE_LABELS[c.status]}</strong></td>
               <td style="color:#64748b">${new Date(c.updatedAt).toLocaleDateString('en-GB')}</td>
               <td style="text-align:right">
-                <button class="btn btn-sm" onclick="VIEW.screen='detail';VIEW.candidateId='${c.id}';render()">Open →</button>
+                <button class="btn btn-sm" onclick="App.openHR('${c.id}')">Open →</button>
               </td>
             </tr>`;
           }).join('')}
@@ -3254,7 +3259,7 @@ window.renderHRDashboard = function() {
         <h3>All Stockist Applications</h3>
         <span style="font-size:13px;color:#64748b">${DB.index.length} total</span>
       </div>
-      <table class="table">
+      <table class="tbl">
         <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
         <tbody>
           ${DB.index.map(c => {
@@ -3266,7 +3271,7 @@ window.renderHRDashboard = function() {
               <td><strong>${STAGE_LABELS[c.status]}</strong></td>
               <td style="color:#64748b">${new Date(c.updatedAt).toLocaleDateString('en-GB')}</td>
               <td style="text-align:right;white-space:nowrap">
-                <button class="btn btn-sm" onclick="VIEW.screen='detail';VIEW.candidateId='${c.id}';render()">Open →</button>
+                <button class="btn btn-sm" onclick="App.openHR('${c.id}')">Open →</button>
                 <button class="btn btn-sm btn-red" onclick="App.deleteCandidate('${c.id}')" title="Delete">🗑</button>
               </td>
             </tr>`;
