@@ -3237,7 +3237,7 @@ window.renderHRDashboard = function() {
         <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
         <tbody>
           ${pending.length === 0 ? '<tr><td colspan="6" class="empty">No stockists awaiting final approval.</td></tr>' : ''}
-          ${pending.map(c => {
+          ${pending.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c => {
             const m = DB.managers[c.managerId];
             return `<tr>
               <td><strong>${esc(c.name)}</strong></td>
@@ -3262,7 +3262,7 @@ window.renderHRDashboard = function() {
       <table class="tbl">
         <thead><tr><th>STOCKIST FIRM</th><th>HIRING MANAGER</th><th>CODE</th><th>STATUS</th><th>UPDATED</th><th></th></tr></thead>
         <tbody>
-          ${DB.index.map(c => {
+          ${DB.index.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c => {
             const m = DB.managers[c.managerId];
             return `<tr>
               <td><strong>${esc(c.name)}</strong></td>
