@@ -277,6 +277,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script>
 
 /* ═══════════════════════════════════════════════════════
@@ -1970,6 +1972,30 @@ async function downloadCandidatePDF(id) {
   let photoDataUrl = '';
   let sigPhotoDataUrl = '';
 
+  // Setup pdfjs worker if available
+  if (window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  async function renderPdfPageToDataUrl(arrayBuffer) {
+    try {
+      if (!window.pdfjsLib) return '';
+      const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdfDoc = await loadingTask.promise;
+      const page = await pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+      return canvas.toDataURL('image/jpeg', 0.95);
+    } catch(err) {
+      console.error('Error rendering PDF page to canvas:', err);
+      return '';
+    }
+  }
+
   async function getBase64Image(filePath) {
     if(!filePath) return '';
     try {
@@ -1977,6 +2003,14 @@ async function downloadCandidatePDF(id) {
       if(error || !data) return '';
       const response = await fetch(data.signedUrl);
       const blob = await response.blob();
+      const isPdf = blob.type === 'application/pdf' || filePath.toLowerCase().endsWith('.pdf');
+      
+      if (isPdf) {
+        const ab = await blob.arrayBuffer();
+        const renderedImg = await renderPdfPageToDataUrl(ab);
+        if (renderedImg) return renderedImg;
+      }
+      
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result);
@@ -2080,20 +2114,121 @@ async function downloadCandidatePDF(id) {
     g.style.gap = '14px';
   });
   
+  const filename = `Candidate_${r.name.replace(/\s+/g,'_')}_${r.id}.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
   const opt = {
     margin:       10,
-    filename:     `Candidate_${r.name.replace(/\s+/g,'_')}_${r.id}.pdf`,
+    filename:     filename,
     image:        { type: 'jpeg', quality: 0.98 },
     html2canvas:  { scale: 2 },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   
-  html2pdf().set(opt).from(el).save().then(() => {
-    toast('PDF downloaded','✅');
-  }).catch(err => {
+  // Collect all other attached documents for merging
+  const docLabelsMap = {};
+  if (typeof DOCUMENT_GROUPS !== 'undefined') {
+    DOCUMENT_GROUPS.forEach(g => {
+      g.items.forEach(it => {
+        docLabelsMap[g.key + '.' + it.key] = it.label;
+      });
+    });
+  }
+
+  const extraDocs = [];
+  if (r.documents) {
+    for (const [key, val] of Object.entries(r.documents)) {
+      if (key === 'personal.photo' || key === 'personal.signaturePhoto') continue;
+      const fileList = Array.isArray(val) ? val : [val];
+      fileList.forEach((f, idx) => {
+        if (f && f.path) {
+          const label = `${docLabelsMap[key] || f.fileName || key}${fileList.length > 1 ? ' (' + (idx+1) + ')' : ''}`;
+          extraDocs.push({ label, path: f.path, fileName: f.fileName });
+        }
+      });
+    }
+  }
+
+  try {
+    const mainPdfWorker = html2pdf().set(opt).from(el);
+    const mainPdfBlob = await mainPdfWorker.outputPdf('blob');
+    
+    // If no extra attachments or PDFLib is unavailable, directly download the main form
+    if (!window.PDFLib || extraDocs.length === 0) {
+      await html2pdf().set(opt).from(el).save();
+      toast('PDF downloaded','✅');
+      return;
+    }
+
+    const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
+    const mainPdfBytes = await mainPdfBlob.arrayBuffer();
+    const mergedPdf = await PDFDocument.load(mainPdfBytes);
+    const font = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
+
+    for (const docItem of extraDocs) {
+      try {
+        const { data, error } = await supa.storage.from('candidate-documents').createSignedUrl(docItem.path, 60);
+        if (error || !data) continue;
+        const resp = await fetch(data.signedUrl);
+        const blob = await resp.blob();
+        const ab = await blob.arrayBuffer();
+        const isPdf = blob.type === 'application/pdf' || docItem.path.toLowerCase().endsWith('.pdf');
+
+        if (isPdf) {
+          const donorPdf = await PDFDocument.load(ab);
+          const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
+          copiedPages.forEach((page, pageIdx) => {
+            const { width, height } = page.getSize();
+            const bannerText = `Attachment: ${docItem.label}${copiedPages.length > 1 ? ' (Page ' + (pageIdx+1) + '/' + copiedPages.length + ')' : ''}`;
+            page.drawText(bannerText, {
+              x: 20,
+              y: height - 20,
+              size: 11,
+              font: font,
+              color: rgb(0.1, 0.2, 0.4)
+            });
+            mergedPdf.addPage(page);
+          });
+        } else if (blob.type.startsWith('image/')) {
+          let embeddedImage;
+          if (blob.type.includes('png') || docItem.path.toLowerCase().endsWith('.png')) {
+            embeddedImage = await mergedPdf.embedPng(ab);
+          } else {
+            embeddedImage = await mergedPdf.embedJpg(ab);
+          }
+          const page = mergedPdf.addPage([595.28, 841.89]); // A4
+          const { width, height } = page.getSize();
+          page.drawText(`Attachment: ${docItem.label}`, {
+            x: 20,
+            y: height - 25,
+            size: 13,
+            font: font,
+            color: rgb(0.1, 0.2, 0.4)
+          });
+          const imgDims = embeddedImage.scaleToFit(555, 780);
+          page.drawImage(embeddedImage, {
+            x: 20 + (555 - imgDims.width) / 2,
+            y: height - 40 - imgDims.height,
+            width: imgDims.width,
+            height: imgDims.height,
+          });
+        }
+      } catch(docErr) {
+        console.error('Error attaching doc ' + docItem.label, docErr);
+      }
+    }
+
+    const mergedBytes = await mergedPdf.save();
+    const finalBlob = new Blob([mergedBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(finalBlob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast('PDF downloaded with all attachments!','✅');
+  } catch(err) {
     console.error('PDF generation error:', err);
     toast('Failed to generate PDF', '❌');
-  });
+  }
 }
 function renderNotifs(list){
   if(!list||!list.length) return '<p class="micro">No notifications yet.</p>';
