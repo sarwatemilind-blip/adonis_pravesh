@@ -435,12 +435,12 @@ async function loadFromStorage() {
   try {
     const [{data: mgrs, error: mgrsErr}, {data: cands, error: candsErr}, {data: elogs, error: elogsErr}] = await Promise.all([
       supa.from('managers').select('*'),
-      supa.from('stockists').select('*'),
+      supa.from('stockists').select('id,manager_id,firm_name,status,application,updated_at,created_at'),
       supa.from('email_log').select('*')
     ]);
     
     if (mgrsErr) console.error("Error loading managers:", mgrsErr);
-    if (candsErr) console.error("Error loading candidates:", candsErr);
+    if (candsErr) console.error("Error loading stockists:", candsErr);
     if (elogsErr) console.error("Error loading email logs:", elogsErr);
     
     if (mgrs) {
@@ -483,26 +483,17 @@ async function loadFromStorage() {
         DB.stockists[c.id] = {
           id: c.id,
           name: firmName,
-          email: c.email,
-          phone: c.phone,
-          position: c.position,
-          source: c.source,
           status: c.status,
           managerId: c.manager_id,
           application: c.application || {},
           documents: c.documents || {},
-          managerReview: c.manager_review || {notes: ''},
-          ratingSheet: c.rating_sheet,
-          hrDecision: c.hr_decision,
-          offerLetter: c.offer_letter,
-          notifications: c.notifications || [],
           updatedAt: new Date(c.updated_at).getTime()
         };
       });
       DB.index = cands.map(c => {
         const firmName = c.firm_name || (c.application && c.application.firm_name) || c.name || 'New Stockist';
         return {
-          id: c.id, name: firmName, email: c.email, position: c.position, 
+          id: c.id, name: firmName, email: '', position: 'Stockist', 
           status: c.status, managerId: c.manager_id, updatedAt: new Date(c.updated_at).getTime()
         };
       });
@@ -519,7 +510,35 @@ async function loadFromStorage() {
     console.error('Failed to load from Supabase', e);
   }
 }
-/* ─── utils ────────────────────────────────────────────── */
+
+// Fetch full record including large documents on-demand
+async function loadFullStockistRecord(id) {
+  try {
+    const { data, error } = await supa.from('stockists').select('*').eq('id', id).single();
+    if (!error && data) {
+      const firmName = data.firm_name || (data.application && data.application.firm_name) || data.name || 'New Stockist';
+      DB.stockists[id] = {
+        id: data.id,
+        name: firmName,
+        status: data.status,
+        managerId: data.manager_id,
+        application: data.application || {},
+        documents: data.documents || {},
+        managerReview: data.manager_review || {notes: ''},
+        ratingSheet: data.rating_sheet,
+        hrDecision: data.hr_decision,
+        offerLetter: data.offer_letter,
+        notifications: data.notifications || [],
+        updatedAt: new Date(data.updated_at).getTime()
+      };
+      REC = DB.stockists[id];
+      return DB.stockists[id];
+    }
+  } catch(e) {
+    console.error('Error fetching full stockist record:', e);
+  }
+  return DB.stockists[id];
+}
 function esc(s){ if(s==null) return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
 function fmtDT(ts)  { return ts ? new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'; }
@@ -835,7 +854,7 @@ function copyLink(code){
   navigator.clipboard.writeText(url).then(()=>toast('Link copied to clipboard','📋')).catch(()=>{ toast('Could not copy — please select and copy the link manually','⚠️'); });
 }
 
-function openManager(id){ REC=DB.stockists[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
+async function openManager(id){ toast("Loading details...","⏳"); await loadFullStockistRecord(id); REC=DB.stockists[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
 function backToMgrDash(){ VIEW.screen='dashboard'; REC=null; render(); }
 
 function renderManagerDetail(){
@@ -1364,7 +1383,7 @@ async function changePw(){
   toast('Admin password updated successfully','✅'); closeModal();
 }
 
-function openHR(id){ REC=DB.stockists[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
+async function openHR(id){ toast("Loading details...","⏳"); await loadFullStockistRecord(id); REC=DB.stockists[id]; VIEW.candidateId=id; VIEW.screen='detail'; render(); window.scrollTo(0,0); }
 function backToHRDash(){ VIEW.screen='dashboard'; REC=null; render(); }
 
 function renderHRDetail(){
@@ -2516,6 +2535,7 @@ document.getElementById('brandLogo').src = LOGO_URI;
   if (m) {
     // Handle deep-link hash for candidates: #candidate/CODE
     const code = m[1].toUpperCase();
+    await loadFullStockistRecord(code);
     const rec = DB.stockists[code];
     if(rec){
       REC = rec;
@@ -2678,6 +2698,8 @@ window.renderStockistData = function(r) {
 
 
 App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
+  toast('Loading documents & generating PDF...','⏳');
+  await loadFullStockistRecord(id);
   const r = DB.stockists[id];
   if(!r) return;
   toast('Generating Stockist PDF...','⏳');
