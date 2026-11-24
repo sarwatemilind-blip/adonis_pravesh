@@ -2703,10 +2703,22 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
   const r = DB.stockists[id];
   if(!r) return;
   toast('Generating Stockist PDF...','⏳');
-  
+
+  // 1. Fetch fresh manager signatures directly from Supabase
+  try {
+    const { data: freshMgrs } = await supa.from('managers').select('id,name,username,designation,reports_to,signature');
+    if (freshMgrs && freshMgrs.length > 0) {
+      freshMgrs.forEach(m => {
+        DB.managers[m.id] = Object.assign(DB.managers[m.id] || {}, m);
+      });
+    }
+  } catch(e) {
+    console.warn('Could not refresh manager signatures:', e);
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  
+
   // Header with Logo
   if(typeof LOGO_URI !== 'undefined' && LOGO_URI) {
     try { doc.addImage(LOGO_URI, 'PNG', 14, 10, 40, 15); } catch(e) {}
@@ -2714,10 +2726,10 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
   doc.setFontSize(16);
   doc.text('STOCKIST APPOINTMENT FORM', 60, 20);
   doc.setFontSize(10);
-  doc.text(`Code: ${r.id} | Status: ${STAGE_LABELS[r.status]}`, 14, 30);
-  
+  doc.text(`Code: ${r.id} | Status: ${STAGE_LABELS[r.status] || r.status}`, 14, 30);
+
   let y = 40;
-  
+
   // Section A
   doc.setFontSize(12);
   doc.text('A. Basic Knowledge About The Party', 14, y); y+=6;
@@ -2726,157 +2738,247 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
     theme: 'grid',
     head: [['Field', 'Details']],
     body: [
-      ['Firm Name', r.application.firm_name || ''],
-      ['Address', r.application.address || ''],
-      ['Telephone', r.application.tel || ''],
-      ['Email', r.application.email || ''],
-      ['Shop Timings', r.application.shop_timings || ''],
-      ['Weekly Off', r.application.weekly_off || ''],
-      ['Partners', r.application.partners || ''],
-      ['GST No.', r.application.gst || ''],
-      ['PAN No.', r.application.pan || ''],
-      ['Drug License (20B)', r.application.dl20b || ''],
-      ['Drug License (21B)', r.application.dl21b || ''],
-      ['Annual Sales', r.application.annual_sales || ''],
-      ['Banker', r.application.banker || '']
+      ['Firm Name', (r.application && r.application.firm_name) || r.name || ''],
+      ['Address', (r.application && r.application.address) || ''],
+      ['Telephone', (r.application && r.application.tel) || ''],
+      ['Email', (r.application && r.application.email) || ''],
+      ['Shop Timings', (r.application && r.application.shop_timings) || ''],
+      ['Weekly Off', (r.application && r.application.weekly_off) || ''],
+      ['Partners', (r.application && r.application.partners) || ''],
+      ['GST No.', (r.application && r.application.gst) || ''],
+      ['PAN No.', (r.application && r.application.pan) || ''],
+      ['Drug License (20B)', (r.application && r.application.dl20b) || ''],
+      ['Drug License (21B)', (r.application && r.application.dl21b) || ''],
+      ['Annual Sales', (r.application && r.application.annual_sales) || ''],
+      ['Banker', (r.application && r.application.banker) || '']
     ]
   });
   y = doc.lastAutoTable.finalY + 10;
-  
+
   // B & D
-  if (y > 250) { doc.addPage(); y = 20; }
+  if (y > 240) { doc.addPage(); y = 20; }
   doc.text('B & D. Evaluation & Critical Factors', 14, y); y+=6;
   doc.autoTable({
     startY: y,
     theme: 'grid',
     body: [
-      ['Ideal Env?', r.application.env || ''],
-      ['Blacklisted?', r.application.blacklisted || ''],
-      ['Reputation', r.application.reputation || ''],
-      ['Supplier Type', r.application.supplier_type || ''],
-      ['Salesmen / Deliverymen', `${r.application.salesmen||0} / ${r.application.deliverymen||0}`],
-      ['Financial Position', r.application.fin_pos || ''],
-      ['Expected Business', r.application.expected_business || ''],
-      ['Credit Limits', r.application.credit_limit || ''],
-      ['% Growth Expected', r.application.growth || ''],
-      ['CA Bill Days', r.application.ca_bill_days || '']
+      ['Ideal Env?', (r.application && r.application.env) || ''],
+      ['Blacklisted?', (r.application && r.application.blacklisted) || ''],
+      ['Reputation', (r.application && r.application.reputation) || ''],
+      ['Supplier Type', (r.application && r.application.supplier_type) || ''],
+      ['Salesmen / Deliverymen', `${(r.application && r.application.salesmen)||0} / ${(r.application && r.application.deliverymen)||0}`],
+      ['Financial Position', (r.application && r.application.fin_pos) || ''],
+      ['Expected Business', (r.application && r.application.expected_business) || ''],
+      ['Credit Limits', (r.application && r.application.credit_limit) || ''],
+      ['% Growth Expected', (r.application && r.application.growth) || ''],
+      ['CA Bill Days', (r.application && r.application.ca_bill_days) || '']
     ]
   });
   y = doc.lastAutoTable.finalY + 10;
-  
+
   // C
-  if (y > 250) { doc.addPage(); y = 20; }
+  if (y > 240) { doc.addPage(); y = 20; }
   doc.text('C. Other Companies', 14, y); y+=6;
-  const cBody = (r.application.other_companies||[]).filter(c=>c && c.name).map(c=>[c.name||'', c.capacity||'', c.since||'', c.turnover||'', c.credit||'']);
+  const cBody = ((r.application && r.application.other_companies)||[]).filter(c=>c && c.name).map(c=>[c.name||'', c.capacity||'', c.since||'', c.turnover||'', c.credit||'']);
   if(cBody.length > 0) {
     doc.autoTable({ startY: y, theme: 'grid', head: [['Company', 'Capacity', 'Since', 'Turnover', 'Credit Days']], body: cBody });
     y = doc.lastAutoTable.finalY + 10;
   }
-  
-  // Signatures
-  if (y > 200) { doc.addPage(); y = 20; }
+
+  // Signatures Section
+  if (y > 190) { doc.addPage(); y = 20; }
+  doc.setFontSize(12);
   doc.text('Record of Signatures & Approvals', 14, y); y+=8;
-  
+
   // Stockist Signature First
-  const stockistDocs = r.documents?.StockistSignature;
+  const stockistDocs = r.documents && r.documents.StockistSignature;
   const stockistSig = Array.isArray(stockistDocs) ? stockistDocs[0] : stockistDocs;
-  
+
   doc.setFontSize(9);
   doc.text('Stockist (Applicant)', 14, y);
-  if (stockistSig && stockistSig.startsWith('data:image')) {
-    try { doc.addImage(stockistSig, 'JPEG', 14, y+2, 30, 15); } catch(e){}
+  if (stockistSig && typeof stockistSig === 'string' && stockistSig.startsWith('data:image')) {
+    try { doc.addImage(stockistSig, undefined, 14, y+2, 32, 16); } catch(e){
+      doc.text('(Signature loaded)', 14, y+10);
+    }
   } else {
     doc.text('(No signature)', 14, y+10);
   }
+
+  // Manager Approval Chain
+  let chain = (typeof window.getApprovalChain === 'function' && r.managerId) ? window.getApprovalChain(r.managerId) : [];
   
-  // Manager Signatures
-  const chain = window.getApprovalChain(r.managerId);
-  const mgrs = chain.map(id => DB.managers[id]).filter(Boolean);
-  
-  let sigX = 60;
-  mgrs.forEach(m => {
-    if(sigX > 160) { sigX = 14; y+= 35; }
-    if (y > 270) { doc.addPage(); y = 20; sigX = 14; }
+  // Always include VP (ADLA02 - Milind Sarwate) for approved applications if not already in chain
+  const vpMgr = Object.values(DB.managers).find(m => (m.designation && m.designation.toUpperCase() === 'VP') || m.username === 'ADLA02');
+  if (vpMgr && !chain.includes(vpMgr.id)) {
+    chain.push(vpMgr.id);
+  }
+
+  const mgrs = chain.map(mid => DB.managers[mid]).filter(Boolean);
+
+  let sigX = 55;
+  mgrs.forEach((m, idx) => {
+    if (sigX > 160) {
+      sigX = 14;
+      y += 28;
+    }
+    if (y > 265) {
+      doc.addPage();
+      y = 20;
+      sigX = 14;
+    }
     doc.setFontSize(9);
-    doc.text(`${m.name} (${m.designation})`, sigX, y);
-    if(m.signature) {
-      try { doc.addImage(m.signature, 'JPEG', sigX, y+2, 30, 15); } catch(e){}
+    doc.text(`${m.name || m.username} (${m.designation || 'Manager'})`, sigX, y);
+    if (m.signature && typeof m.signature === 'string' && m.signature.startsWith('data:image')) {
+      try {
+        doc.addImage(m.signature, undefined, sigX, y+2, 32, 16);
+      } catch(e) {
+        console.warn('Could not add image for manager', m.name, e);
+        doc.text('(Signed digitally)', sigX, y+10);
+      }
     } else {
-      doc.text('(No signature)', sigX, y+10);
+      doc.text('(Pending signature)', sigX, y+10);
     }
     sigX += 45;
   });
-  
+
   // Attachments Section
   const categoryLabels = {
-    'AadharCard': 'Aadhar Card', 'DrugLicense': 'Drug License', 'GSTCertificate': 'GST Certificate',
-    'PANCard': 'PAN Card', 'PartnershipDeed': 'Partnership Deed', 'PhotographsofProprietor': 'Proprietor Photos',
+    'AadharCard': 'Aadhar Card',
+    'DrugLicense': 'Drug License',
+    'GSTCertificate': 'GST Certificate',
+    'PANCard': 'PAN Card',
+    'PartnershipDeed': 'Partnership Deed',
+    'PhotographsofProprietor': 'Proprietor Photographs',
     'StockistSignature': 'Stockist Signature'
   };
-  
+
   const docKeys = Object.keys(r.documents || {});
-  const pdfAttachments = [];
-  
+  const attachments = [];
+
   docKeys.forEach(k => {
-    if (k === 'StockistSignature') return; // already in signature block
+    if (k === 'StockistSignature') return; // already displayed in signature block
     const list = Array.isArray(r.documents[k]) ? r.documents[k] : [r.documents[k]];
-    list.forEach((docBase64, idx) => {
-      if (!docBase64) return;
+    list.forEach((docData, idx) => {
+      if (!docData) return;
       const docLabel = `${categoryLabels[k] || k}${list.length > 1 ? ' (' + (idx+1) + ')' : ''}`;
-      
-      if (docBase64.startsWith('data:image')) {
-        doc.addPage();
-        doc.setFontSize(14);
-        doc.text(`Attachment: ${docLabel}`, 14, 20);
-        try {
-          doc.addImage(docBase64, 'JPEG', 14, 30, 180, 250, undefined, 'FAST');
-        } catch(e) {
-          console.error('Error adding image attachment to PDF', e);
-        }
-      } else if (docBase64.includes('application/pdf')) {
-        pdfAttachments.push({ label: docLabel, base64: docBase64 });
-      }
+      attachments.push({ label: docLabel, data: docData });
     });
   });
 
-  // Base jsPDF bytes
+  // Base jsPDF array buffer
   const jspdfBytes = doc.output('arraybuffer');
-  const filename = `${r.application.firm_name || 'Stockist'}_Application.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
+  const filename = `${(r.application && r.application.firm_name) || r.name || 'Stockist'}_Appointment.pdf`.replace(/[/\\?%*:|"<>]/g, '_');
 
-  // If pdf-lib is available and we have PDF attachments, merge them seamlessly
-  if (window.PDFLib && pdfAttachments.length > 0) {
+  // If pdf-lib is available and we have attachments, merge them seamlessly
+  if (window.PDFLib && attachments.length > 0) {
     try {
       const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
       const mergedPdf = await PDFDocument.load(jspdfBytes);
       const font = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
+      const fontRegular = await mergedPdf.embedFont(StandardFonts.Helvetica);
 
-      for (const item of pdfAttachments) {
+      for (const item of attachments) {
         try {
-          const rawBase64 = item.base64.split(',')[1] || item.base64;
+          const docStr = typeof item.data === 'string' ? item.data : '';
+          const rawBase64 = docStr.includes(',') ? docStr.split(',')[1] : docStr;
+          if (!rawBase64) continue;
+
           const binaryStr = atob(rawBase64);
           const bytes = new Uint8Array(binaryStr.length);
           for (let i = 0; i < binaryStr.length; i++) {
             bytes[i] = binaryStr.charCodeAt(i);
           }
 
-          const donorPdf = await PDFDocument.load(bytes);
-          const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
+          const isPdf = docStr.includes('application/pdf') || (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
+          const isImage = docStr.startsWith('data:image/') || (!isPdf && (bytes[0] === 0xFF && bytes[1] === 0xD8 || bytes[0] === 0x89 && bytes[1] === 0x50));
 
-          copiedPages.forEach((page, pageIdx) => {
+          if (isPdf) {
+            // Merge donor PDF pages
+            const donorPdf = await PDFDocument.load(bytes);
+            const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
+            copiedPages.forEach((page, pageIdx) => {
+              const { width, height } = page.getSize();
+              const bannerText = `Attachment: ${item.label}${copiedPages.length > 1 ? ' (Page ' + (pageIdx+1) + '/' + copiedPages.length + ')' : ''}`;
+              page.drawText(bannerText, {
+                x: 20,
+                y: height - 20,
+                size: 11,
+                font: font,
+                color: rgb(0.1, 0.2, 0.4)
+              });
+              mergedPdf.addPage(page);
+            });
+          } else if (isImage) {
+            // Embed image onto an A4 page
+            let embeddedImage;
+            const isPng = docStr.includes('image/png') || (bytes[0] === 0x89 && bytes[1] === 0x50);
+            if (isPng) {
+              embeddedImage = await mergedPdf.embedPng(bytes);
+            } else {
+              embeddedImage = await mergedPdf.embedJpg(bytes);
+            }
+
+            const page = mergedPdf.addPage([595.28, 841.89]); // A4 in points
             const { width, height } = page.getSize();
-            // Header banner on top of attached PDF page
-            const bannerText = `Attachment: ${item.label}${copiedPages.length > 1 ? ' (Page ' + (pageIdx+1) + '/' + copiedPages.length + ')' : ''}`;
-            page.drawText(bannerText, {
-              x: 20,
-              y: height - 20,
-              size: 11,
+            page.drawText(`Attachment: ${item.label}`, {
+              x: 24,
+              y: height - 28,
+              size: 13,
               font: font,
               color: rgb(0.1, 0.2, 0.4)
             });
-            mergedPdf.addPage(page);
-          });
+
+            const imgDims = embeddedImage.scaleToFit(547, 770);
+            page.drawImage(embeddedImage, {
+              x: 24 + (547 - imgDims.width) / 2,
+              y: height - 42 - imgDims.height,
+              width: imgDims.width,
+              height: imgDims.height
+            });
+          } else {
+            // Office document (Word .docx, Excel, etc.) or unknown binary: render a formal attachment notice page
+            const page = mergedPdf.addPage([595.28, 841.89]);
+            const { width, height } = page.getSize();
+            page.drawText(`Attachment: ${item.label}`, {
+              x: 24,
+              y: height - 28,
+              size: 13,
+              font: font,
+              color: rgb(0.1, 0.2, 0.4)
+            });
+            page.drawRectangle({
+              x: 24,
+              y: height - 160,
+              width: 547,
+              height: 110,
+              color: rgb(0.96, 0.97, 0.98),
+              borderColor: rgb(0.8, 0.85, 0.9),
+              borderWidth: 1
+            });
+            page.drawText('Document Attached (Non-PDF/Word File)', {
+              x: 40,
+              y: height - 80,
+              size: 14,
+              font: font,
+              color: rgb(0.1, 0.2, 0.4)
+            });
+            page.drawText('This document was uploaded as an office / external file (e.g. Word document).', {
+              x: 40,
+              y: height - 105,
+              size: 10,
+              font: fontRegular,
+              color: rgb(0.3, 0.3, 0.3)
+            });
+            page.drawText('To view or inspect this file, please open the original record in the Pravesh application portal.', {
+              x: 40,
+              y: height - 125,
+              size: 10,
+              font: fontRegular,
+              color: rgb(0.3, 0.3, 0.3)
+            });
+          }
         } catch(err) {
-          console.error('Error merging PDF attachment ' + item.label, err);
+          console.error('Error attaching file ' + item.label, err);
         }
       }
 
@@ -2895,7 +2997,7 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
     }
   }
 
-  // Fallback direct save if no PDF attachments or PDFLib failed
+  // Fallback direct save if no attachments or PDFLib failed
   doc.save(filename);
   toast('PDF Downloaded!','✅');
 };
