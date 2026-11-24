@@ -279,6 +279,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
 <script>
@@ -2877,6 +2879,69 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
       const font = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
       const fontRegular = await mergedPdf.embedFont(StandardFonts.Helvetica);
 
+      // Universal image-to-JPEG converter via Canvas for unsupported browser image types
+      async function renderImageToJpegBytes(src) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width || 800;
+              canvas.height = img.naturalHeight || img.height || 600;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+              const raw = atob(dataUrl.split(',')[1]);
+              const arr = new Uint8Array(raw.length);
+              for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+              resolve(arr);
+            } catch(e) { reject(e); }
+          };
+          img.onerror = () => reject(new Error('Image failed to load'));
+          img.src = src;
+        });
+      }
+
+      // Helper to render text lines cleanly across A4 pages
+      function renderTextToPages(title, textContent) {
+        const lines = textContent.split(/\r?\n/);
+        let currentPage = mergedPdf.addPage([595.28, 841.89]);
+        let curY = 841.89 - 30;
+        currentPage.drawText(title, { x: 24, y: curY, size: 13, font: font, color: rgb(0.1, 0.2, 0.4) });
+        curY -= 25;
+
+        for (let line of lines) {
+          // Wrap long lines
+          const words = line.split(' ');
+          let curLine = '';
+          for (let w of words) {
+            const testLine = curLine ? curLine + ' ' + w : w;
+            if (testLine.length * 6 > 540) {
+              if (curY < 40) {
+                currentPage = mergedPdf.addPage([595.28, 841.89]);
+                curY = 841.89 - 40;
+              }
+              currentPage.drawText(curLine, { x: 24, y: curY, size: 9, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
+              curY -= 14;
+              curLine = w;
+            } else {
+              curLine = testLine;
+            }
+          }
+          if (curLine) {
+            if (curY < 40) {
+              currentPage = mergedPdf.addPage([595.28, 841.89]);
+              curY = 841.89 - 40;
+            }
+            currentPage.drawText(curLine, { x: 24, y: curY, size: 9, font: fontRegular, color: rgb(0.2, 0.2, 0.2) });
+            curY -= 14;
+          }
+        }
+      }
+
       for (const item of attachments) {
         try {
           const docStr = typeof item.data === 'string' ? item.data : '';
@@ -2890,10 +2955,11 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
           }
 
           const isPdf = docStr.includes('application/pdf') || (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
-          const isImage = docStr.startsWith('data:image/') || (!isPdf && (bytes[0] === 0xFF && bytes[1] === 0xD8 || bytes[0] === 0x89 && bytes[1] === 0x50));
+          const isZip = (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B); // PK.. (DOCX, XLSX)
+          const isImageHeader = docStr.startsWith('data:image/') || (bytes.length >= 2 && ((bytes[0] === 0xFF && bytes[1] === 0xD8) || (bytes[0] === 0x89 && bytes[1] === 0x50) || (bytes[0] === 0x47 && bytes[1] === 0x49) || (bytes[0] === 0x42 && bytes[1] === 0x4D)));
 
           if (isPdf) {
-            // Merge donor PDF pages
+            // 1. PDF Documents: Merge pages directly
             const donorPdf = await PDFDocument.load(bytes);
             const copiedPages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
             copiedPages.forEach((page, pageIdx) => {
@@ -2908,17 +2974,97 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
               });
               mergedPdf.addPage(page);
             });
-          } else if (isImage) {
-            // Embed image onto an A4 page
-            let embeddedImage;
-            const isPng = docStr.includes('image/png') || (bytes[0] === 0x89 && bytes[1] === 0x50);
-            if (isPng) {
-              embeddedImage = await mergedPdf.embedPng(bytes);
-            } else {
-              embeddedImage = await mergedPdf.embedJpg(bytes);
+          } else if (isZip && window.JSZip) {
+            // 2. Word (.docx) / Zip: Extract all embedded photos/scans & text
+            let extractedAny = false;
+            try {
+              const zip = await JSZip.loadAsync(bytes);
+              const mediaFiles = Object.keys(zip.files).filter(fn => fn.startsWith('word/media/') && !zip.files[fn].dir);
+              
+              if (mediaFiles.length > 0) {
+                for (let mIdx = 0; mIdx < mediaFiles.length; mIdx++) {
+                  const mFile = zip.files[mediaFiles[mIdx]];
+                  const mBytes = await mFile.async('uint8array');
+                  let embeddedImg;
+                  try {
+                    if (mBytes[0] === 0x89 && mBytes[1] === 0x50) {
+                      embeddedImg = await mergedPdf.embedPng(mBytes);
+                    } else if (mBytes[0] === 0xFF && mBytes[1] === 0xD8) {
+                      embeddedImg = await mergedPdf.embedJpg(mBytes);
+                    } else {
+                      const blob = new Blob([mBytes]);
+                      const blobUrl = URL.createObjectURL(blob);
+                      const conv = await renderImageToJpegBytes(blobUrl);
+                      URL.revokeObjectURL(blobUrl);
+                      embeddedImg = await mergedPdf.embedJpg(conv);
+                    }
+                  } catch(e) {
+                    const blob = new Blob([mBytes]);
+                    const blobUrl = URL.createObjectURL(blob);
+                    const conv = await renderImageToJpegBytes(blobUrl);
+                    URL.revokeObjectURL(blobUrl);
+                    embeddedImg = await mergedPdf.embedJpg(conv);
+                  }
+
+                  if (embeddedImg) {
+                    extractedAny = true;
+                    const page = mergedPdf.addPage([595.28, 841.89]);
+                    const { width, height } = page.getSize();
+                    page.drawText(`Attachment: ${item.label}${mediaFiles.length > 1 ? ' (Image ' + (mIdx+1) + '/' + mediaFiles.length + ')' : ''}`, {
+                      x: 24,
+                      y: height - 28,
+                      size: 13,
+                      font: font,
+                      color: rgb(0.1, 0.2, 0.4)
+                    });
+                    const dims = embeddedImg.scaleToFit(547, 770);
+                    page.drawImage(embeddedImg, {
+                      x: 24 + (547 - dims.width) / 2,
+                      y: height - 42 - dims.height,
+                      width: dims.width,
+                      height: dims.height
+                    });
+                  }
+                }
+              }
+
+              // Extract text if any
+              if (zip.files['word/document.xml']) {
+                const xml = await zip.files['word/document.xml'].async('string');
+                const textNodes = xml.match(/<w:t[^>]*>(.*?)<\/w:t>/g) || [];
+                const extractedText = textNodes.map(t => t.replace(/<[^>]+>/g, '')).join(' ').trim();
+                if (extractedText && extractedText.length > 30) {
+                  renderTextToPages(`Attachment: ${item.label} (Document Content)`, extractedText);
+                  extractedAny = true;
+                }
+              }
+            } catch(zipErr) {
+              console.warn('Could not extract docx media via JSZip', zipErr);
             }
 
-            const page = mergedPdf.addPage([595.28, 841.89]); // A4 in points
+            if (!extractedAny) {
+              renderTextToPages(`Attachment: ${item.label}`, 'Office Word Document attached.\nFile contains binary/protected data.');
+            }
+          } else if (isImageHeader) {
+            // 3. Images: Embed directly or convert via Canvas
+            let embeddedImage;
+            const isPng = docStr.includes('image/png') || (bytes[0] === 0x89 && bytes[1] === 0x50);
+            try {
+              if (isPng) {
+                embeddedImage = await mergedPdf.embedPng(bytes);
+              } else if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+                embeddedImage = await mergedPdf.embedJpg(bytes);
+              } else {
+                const conv = await renderImageToJpegBytes(docStr);
+                embeddedImage = await mergedPdf.embedJpg(conv);
+              }
+            } catch(imgErr) {
+              console.warn('Direct image embed failed, converting through canvas:', imgErr);
+              const conv = await renderImageToJpegBytes(docStr);
+              embeddedImage = await mergedPdf.embedJpg(conv);
+            }
+
+            const page = mergedPdf.addPage([595.28, 841.89]);
             const { width, height } = page.getSize();
             page.drawText(`Attachment: ${item.label}`, {
               x: 24,
@@ -2936,46 +3082,28 @@ App.downloadCandidatePDF = window.downloadCandidatePDF = async function(id) {
               height: imgDims.height
             });
           } else {
-            // Office document (Word .docx, Excel, etc.) or unknown binary: render a formal attachment notice page
-            const page = mergedPdf.addPage([595.28, 841.89]);
-            const { width, height } = page.getSize();
-            page.drawText(`Attachment: ${item.label}`, {
-              x: 24,
-              y: height - 28,
-              size: 13,
-              font: font,
-              color: rgb(0.1, 0.2, 0.4)
-            });
-            page.drawRectangle({
-              x: 24,
-              y: height - 160,
-              width: 547,
-              height: 110,
-              color: rgb(0.96, 0.97, 0.98),
-              borderColor: rgb(0.8, 0.85, 0.9),
-              borderWidth: 1
-            });
-            page.drawText('Document Attached (Non-PDF/Word File)', {
-              x: 40,
-              y: height - 80,
-              size: 14,
-              font: font,
-              color: rgb(0.1, 0.2, 0.4)
-            });
-            page.drawText('This document was uploaded as an office / external file (e.g. Word document).', {
-              x: 40,
-              y: height - 105,
-              size: 10,
-              font: fontRegular,
-              color: rgb(0.3, 0.3, 0.3)
-            });
-            page.drawText('To view or inspect this file, please open the original record in the Pravesh application portal.', {
-              x: 40,
-              y: height - 125,
-              size: 10,
-              font: fontRegular,
-              color: rgb(0.3, 0.3, 0.3)
-            });
+            // 4. Spreadsheets / Text / Other
+            let handled = false;
+            if (window.XLSX) {
+              try {
+                const wb = XLSX.read(bytes, { type: 'array' });
+                const firstSheet = wb.Sheets[wb.SheetNames[0]];
+                const csv = XLSX.utils.sheet_to_csv(firstSheet);
+                if (csv && csv.trim()) {
+                  renderTextToPages(`Attachment: ${item.label} (Spreadsheet)`, csv);
+                  handled = true;
+                }
+              } catch(e) {}
+            }
+            if (!handled) {
+              try {
+                const txt = new TextDecoder().decode(bytes);
+                if (txt && txt.trim()) {
+                  renderTextToPages(`Attachment: ${item.label}`, txt);
+                  handled = true;
+                }
+              } catch(e) {}
+            }
           }
         } catch(err) {
           console.error('Error attaching file ' + item.label, err);
